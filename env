@@ -1,0 +1,45 @@
+# ══════════════════════════════════════════════════════════════
+#  PriceLens v4 — Environment Configuration
+# ══════════════════════════════════════════════════════════════
+
+# ── Google Sheets ─────────────────────────────────────────────
+MASTER_MAPPER_ID=1KmTy3xrazd0a8Ew1HUOVvnxZv0QaT6ARR4aiDYZuQVM
+MASTER_MAPPER_SHEET=Master mapper
+SPREADSHEET_ZZZ_ID=1-GBfTEnnd9_wKRoERB0Z8XURPqh_SU58VG9lMpdAJ5c
+SHEET_PMASTER=price master
+CREDENTIALS_PATH=credentials.json
+
+# ── Run Settings ──────────────────────────────────────────────
+DELAY_SEC=0.5
+
+# ── Slack ─────────────────────────────────────────────────────
+SLACK_WEBHOOK=
+SLACK_CHANNEL=#comp-pricing-alerts
+
+# ── JioMart ───────────────────────────────────────────────────
+JIO_PINCODE=516001
+JIO_CITY=KADAPA
+JIO_STATE=ANDHRA_PRADESH
+JIO_LATITUDE=14.4783475
+JIO_LONGITUDE=78.821275
+JIO_POLYGON_IDS=6918_QC_72418806,T2ZC_QC_932e287c
+JIO_STORE_IDS=3121||15594||10319
+JIO_AUTHORIZATION=Bearer Njg1OTQ1ZjQ2YzhjN2FlZTNmM2FmNjA1OlRwS3c3d0Q5aA==
+
+# ── BigBasket ─────────────────────────────────────────────────
+BB_IMPERSONATE=chrome131
+BB_COOKIE_X_CHANNEL=web
+BB_COOKIE_BB_VID=OTkzMTMyODUwMzU1MTkzODM4
+BB_COOKIE_BB_BB20=1
+BB_COOKIE_BIGBASKET=c15c83ed-9446-4da8-9787-b96e3cca015d
+BB_COOKIE_CSRFTOKEN=DPv89d28VTBHpanYBRqNj5ARogKErMXZpI1AyA8a7i2pR1zJSLCi3kqeRk5QbbJo
+BB_COOKIE_SESSIONID=vmtji0y17krdhiyucbzg511vvq2llvuj
+BB_COOKIE_PIN_CODE=516001
+
+# ── DMart ─────────────────────────────────────────────────────
+DMART_IMPERSONATE=chrome131
+DMART_PINCODE=520013
+DMART_COOKIE_GA=GA1.1.1223342358.1775106732
+DMART_COOKIE_UUID=
+DMART_COOKIE_D_INFO=w-20260424_120900
+DMART_COOKIE_REQ_ID=OTZlMzE2YTQtMTdmNi00MzQ0LWFkYTQtNTYyM2RmMDRmYmZlfHxTLTIwMjYwNDI0XzEyMDkwMHx8LTEwMDI=
