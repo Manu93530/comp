@@ -129,7 +129,7 @@ DMART_BASE_HEADERS = {
 }
 
 config_store = {
-    "spreadsheet_zzz_id": os.getenv("SPREADSHEET_ZZZ_ID"),
+    "spreadsheet_zzz_id": os.getenv("SPREADSHEET_ZZZ_ID","1-GBfTEnnd9_wKRoERB0Z8XURPqh_SU58VG9lMpdAJ5c"),
     "sheet_pmaster":      os.getenv("SHEET_PMASTER", "price master"),
     "credentials_path":   os.getenv("CREDENTIALS_PATH", "credentials.json"),
     "delay_sec":          float(os.getenv("DELAY_SEC", 0.5)),
