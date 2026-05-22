@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>PriceLens v4 — Sheets Intelligence</title>
+<title>PriceLens v5 — Price Intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@300;400;500&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -43,7 +43,6 @@
   --crit:    #b91c1c;
   --crit-bg: #fef2f2;
   --crit-border:#fca5a5;
-  /* DMart colour — coral/red brand */
   --dmart:        #d4380d;
   --dmart-bg:     #fff1ee;
   --dmart-border: #faa090;
@@ -201,14 +200,18 @@ body{background:var(--bg);color:var(--ink);font-family:var(--body);min-height:10
 .log-WARN .log-msg{color:var(--amber);}
 .log-ERROR .log-msg{color:var(--red);}
 
-/* ── TABLE ───────────────────────────────────────── */
+/* ── TABLE — with resizable columns ─────────────── */
 .tbl-wrap{overflow-x:auto;border-radius:var(--r8);border:1px solid var(--edge);background:var(--surface);}
-table{width:100%;border-collapse:collapse;}
+table{width:100%;border-collapse:collapse;table-layout:fixed;}
 thead{background:var(--bg2);}
 th{padding:9px 13px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);
-  letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid var(--edge);white-space:nowrap;}
+  letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid var(--edge);
+  white-space:nowrap;position:relative;user-select:none;overflow:hidden;}
+th .col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;
+  background:transparent;z-index:10;}
+th .col-resize-handle:hover,th.resizing .col-resize-handle{background:var(--green);opacity:.5;}
 td{padding:10px 13px;font-size:12px;font-family:var(--mono);
-  border-bottom:1px solid var(--bg2);color:var(--soft);}
+  border-bottom:1px solid var(--bg2);color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 tr:last-child td{border-bottom:none;}
 tbody tr:hover{background:var(--bg2);}
 td.name{color:var(--ink);font-family:var(--body);font-size:13px;
@@ -225,6 +228,9 @@ td.name{color:var(--ink);font-family:var(--body);font-size:13px;
 .bo{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border);}
 .bd{background:var(--dmart-bg);color:var(--dmart);border:1px solid var(--dmart-border);}
 
+/* search highlight */
+mark.hl{background:rgba(183,113,10,.22);color:var(--amber);border-radius:2px;padding:0 1px;}
+
 /* ── SUBTABS ─────────────────────────────────────── */
 .subtab-bar{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--edge);
   border-radius:var(--r8);padding:4px;margin-bottom:16px;width:fit-content;}
@@ -233,12 +239,21 @@ td.name{color:var(--ink);font-family:var(--body);font-size:13px;
 .subtab:hover{color:var(--ink);}
 .subtab.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.1);}
 
-/* ── FORM / SEARCH ───────────────────────────────── */
+/* ── SEARCH BAR ──────────────────────────────────── */
 .search-bar{display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;}
-.search-in{flex:1;min-width:160px;padding:7px 12px;background:var(--surface);
+.search-wrap{position:relative;flex:1;min-width:160px;}
+.search-in{width:100%;padding:7px 36px 7px 12px;background:var(--surface);
   border:1px solid var(--edge);border-radius:var(--r4);color:var(--ink);
-  font-family:var(--mono);font-size:12px;}
-.search-in:focus{outline:none;border-color:var(--green);}
+  font-family:var(--mono);font-size:12px;transition:border-color .15s,box-shadow .15s;}
+.search-in:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(26,127,75,.1);}
+.search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;line-height:1;
+  display:none;padding:2px;}
+.search-clear:hover{color:var(--ink);}
+.search-in:not(:placeholder-shown) + .search-clear{display:block;}
+.search-count{font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;
+  padding:5px 10px;background:var(--bg2);border:1px solid var(--edge);border-radius:var(--r4);}
+.search-count.has-results{color:var(--green);border-color:var(--green-border);background:var(--green-bg);}
 select.fsel{padding:7px 11px;background:var(--surface);border:1px solid var(--edge);
   border-radius:var(--r4);color:var(--ink);font-family:var(--mono);font-size:12px;}
 select.fsel:focus{outline:none;border-color:var(--green);}
@@ -339,7 +354,61 @@ select.fsel:focus{outline:none;border-color:var(--green);}
 .dash-chart-legend{display:flex;gap:14px;font-size:11px;color:var(--muted);
   font-family:var(--mono);margin-bottom:10px;flex-wrap:wrap;align-items:center;}
 .dcl-dot{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:4px;flex-shrink:0;}
-.dash-chart-box{position:relative;width:100%;min-height:260px;}
+.dash-chart-box{position:relative;width:100%;overflow-y:auto;max-height:640px;}
+
+/* chart scroll track */
+.dash-chart-box::-webkit-scrollbar{width:4px;}
+.dash-chart-box::-webkit-scrollbar-thumb{background:var(--edge2);border-radius:3px;}
+/* ── CHARTS TAB ───────────────────────────── */
+.chart-filterbar{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r12);
+  padding:14px 18px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+  box-shadow:0 1px 6px rgba(0,0,0,.04);}
+.cfilt-group{display:flex;flex-direction:column;gap:4px;min-width:130px;}
+.cfilt-label{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;}
+.chart-stats-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;}
+.cstat{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r8);padding:11px 14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.03);}
+.cstat-val{font-size:22px;font-weight:700;font-family:var(--mono);line-height:1.1;}
+.cstat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;}
+.chart-full-card{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r12);padding:20px 22px;margin-bottom:20px;box-shadow:0 1px 6px rgba(0,0,0,.04);}
+.chart-full-title{font-family:var(--disp);font-weight:700;font-size:15px;color:var(--ink);}
+.chart-full-sub{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:3px;}
+.chart-scroll-zone{overflow-y:auto;width:100%;}
+.chart-scroll-zone::-webkit-scrollbar{width:4px;}
+.chart-scroll-zone::-webkit-scrollbar-thumb{background:var(--edge2);border-radius:3px;}
+
+/* ── TRENDS TAB ───────────────────────────── */
+:root{--teal:#0e7490;--teal-bg:#f0fafb;--teal-border:#a5d8e0;}
+.trends-filterbar{background:var(--surface);border:1px solid var(--teal-border);border-radius:var(--r12);padding:16px 20px;margin-bottom:18px;box-shadow:0 1px 8px rgba(14,116,144,.06);}
+.trends-filterbar-title{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--teal);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.trends-filtergrid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:flex-end;}
+.sku-typeahead{position:relative;}
+.sku-input{width:100%;padding:7px 11px;background:var(--surface);border:1px solid var(--edge);border-radius:var(--r4);color:var(--ink);font-family:var(--mono);font-size:12px;transition:border-color .14s;}
+.sku-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,116,144,.1);}
+.sku-dd{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--edge);border-radius:0 0 var(--r8) var(--r8);max-height:220px;overflow-y:auto;z-index:400;box-shadow:0 8px 24px rgba(0,0,0,.12);display:none;}
+.sku-dd.open{display:block;}
+.sku-dd-item{padding:8px 12px;font-size:12px;font-family:var(--mono);cursor:pointer;border-bottom:1px solid var(--bg2);display:flex;align-items:center;gap:8px;}
+.sku-dd-item:hover{background:var(--bg2);}
+.sku-dd-item:last-child{border-bottom:none;}
+.sku-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.sku-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:var(--teal-bg);border:1px solid var(--teal-border);border-radius:12px;font-size:11px;font-family:var(--mono);color:var(--teal);}
+.sku-chip-rm{background:none;border:none;cursor:pointer;color:var(--teal);font-size:14px;padding:0 0 0 3px;line-height:1;}
+.backup-status-card{background:var(--surface);border:1px solid var(--teal-border);border-radius:var(--r12);padding:16px 20px;margin-bottom:18px;box-shadow:0 1px 6px rgba(14,116,144,.06);}
+.backup-status-title{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--teal);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.backup-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+.backup-kpi{text-align:center;}
+.backup-kpi-val{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--teal);}
+.backup-kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;}
+.trend-card{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r12);padding:18px 20px;box-shadow:0 1px 6px rgba(0,0,0,.04);}
+.trend-card.teal{border-color:var(--teal-border);}
+.trend-chart-area{position:relative;min-height:280px;}
+.trend-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:280px;color:var(--muted);font-family:var(--mono);font-size:12px;gap:8px;background:var(--bg2);border-radius:var(--r8);}
+.trends-2col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+.runs-mini-table{width:100%;border-collapse:collapse;}
+.runs-mini-table th{padding:6px 10px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid var(--edge);text-align:left;}
+.runs-mini-table td{padding:7px 10px;font-size:11px;font-family:var(--mono);border-bottom:1px solid var(--bg2);}
+.runs-mini-table tr:last-child td{border-bottom:none;}
+.runs-mini-table tbody tr:hover{background:var(--bg2);}
+
 
 .dash-g2-bot{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
 
@@ -418,6 +487,10 @@ select.fsel:focus{outline:none;border-color:var(--green);}
 .legend{display:inline-flex;align-items:center;gap:14px;padding:6px 14px;
   border-radius:var(--r4);background:var(--surface);border:1px solid var(--edge);
   font-size:11px;font-family:var(--mono);margin-bottom:14px;}
+
+/* chart count badge */
+.chart-count-badge{font-size:10px;font-family:var(--mono);color:var(--muted);
+  padding:2px 8px;border:1px solid var(--edge);border-radius:12px;background:var(--bg2);}
 </style>
 </head>
 <body>
@@ -427,6 +500,14 @@ select.fsel:focus{outline:none;border-color:var(--green);}
   <div class="sb-sec">Overview</div>
   <button class="nav-btn active" onclick="nav('dashboard')" data-tab="dashboard">
     <span class="nav-icon">◈</span><span class="nav-label">Dashboard</span>
+  </button>
+  <div class="sb-divider"></div>
+  <div class="sb-sec">Analysis</div>
+  <button class="nav-btn" onclick="nav('charts')" data-tab="charts">
+    <span class="nav-icon">📊</span><span class="nav-label">Charts</span>
+  </button>
+  <button class="nav-btn" onclick="nav('trends')" data-tab="trends">
+    <span class="nav-icon">📈</span><span class="nav-label">Trends</span>
   </button>
   <div class="sb-divider"></div>
   <div class="sb-sec">Scraper</div>
@@ -515,55 +596,18 @@ select.fsel:focus{outline:none;border-color:var(--green);}
         A <span style="color:var(--green);font-weight:600;">negative gap ✓</span> means SuperK discounts more (edge).
         In <strong>Agnostic mode</strong>, gap is raw ₹ difference (comp SP − SK SP).
         Sources: <span style="color:var(--amber);">🟡 JioMart</span> · <span style="color:var(--green);">🟢 BigBasket</span> · <span style="color:var(--dmart);">🟠 DMart Ready</span>
+        · <span style="color:var(--crit);font-weight:600;">🔴 Red outline = Critical SKU</span>
       </div>
 
-      <!-- Source filter tabs for dashboard -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-        <span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;">View by source:</span>
-        <div style="display:flex;gap:4px;background:var(--bg2);border:1px solid var(--edge);border-radius:var(--r8);padding:3px;">
-          <button class="subtab active" id="dsf-all"   onclick="dashSrcTab('all',this)">All Sources</button>
-          <button class="subtab" id="dsf-jio"          onclick="dashSrcTab('jio',this)">🟡 JioMart</button>
-          <button class="subtab" id="dsf-bb"           onclick="dashSrcTab('bb',this)">🟢 BigBasket</button>
-          <button class="subtab" id="dsf-dmart"        onclick="dashSrcTab('dmart',this)">🟠 DMart</button>
+      <!-- Charts moved to dedicated tab -->
+      <div style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:var(--r12);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;">
+        <div style="font-size:28px;">📊</div>
+        <div style="flex:1;">
+          <div style="font-family:var(--disp);font-weight:700;font-size:14px;color:var(--blue);">Charts moved to dedicated tab</div>
+          <div style="font-size:12px;color:var(--soft);margin-top:3px;">Full-width MRP &amp; Agnostic charts with category, source, mode filters — all products visible at once</div>
         </div>
-      </div>
-
-      <div class="dash-g2">
-        <div class="dash-card">
-          <div class="dash-card-hd">
-            <div>
-              <div class="dash-card-title">Discount Gap — MRP Mode</div>
-              <div class="dash-card-sub">Competitor % off MRP minus SK % off MRP, per SKU</div>
-            </div>
-            <div class="crit-avg-pill" id="mrp-avg-pill"
-              style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);">Avg —</div>
-          </div>
-          <div class="dash-chart-legend">
-            <span><span class="dcl-dot" style="background:rgba(192,57,43,.8);"></span>Comp cheaper ⚠</span>
-            <span><span class="dcl-dot" style="background:rgba(26,127,75,.8);"></span>SK cheaper ✓</span>
-            <span><span class="dcl-dot" style="background:rgba(160,155,140,.45);"></span>Equal</span>
-          </div>
-          <div class="dash-chart-box" id="mrp-chart-wrap">
-            <div class="loading-state"><div class="spinner"></div>Waiting for data…</div>
-          </div>
-        </div>
-        <div class="dash-card">
-          <div class="dash-card-hd">
-            <div>
-              <div class="dash-card-title">Price Difference — Agnostic Mode</div>
-              <div class="dash-card-sub">Comp SP minus SK SP (₹), per SKU</div>
-            </div>
-            <div class="crit-avg-pill" id="ag-avg-pill"
-              style="background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);">Avg —</div>
-          </div>
-          <div class="dash-chart-legend">
-            <span><span class="dcl-dot" style="background:rgba(192,57,43,.8);"></span>Comp SP higher ⚠</span>
-            <span><span class="dcl-dot" style="background:rgba(26,127,75,.8);"></span>SK SP lower ✓</span>
-          </div>
-          <div class="dash-chart-box" id="ag-chart-wrap">
-            <div class="loading-state"><div class="spinner"></div>Waiting for data…</div>
-          </div>
-        </div>
+        <button class="btn btn-sky btn-sm" onclick="nav('charts')">📊 Open Charts →</button>
+        <button class="btn btn-ghost btn-sm" onclick="nav('trends')" style="color:var(--teal);border-color:var(--teal-border);">📈 Trends →</button>
       </div>
 
       <!-- Per-source breakdown cards -->
@@ -590,7 +634,7 @@ select.fsel:focus{outline:none;border-color:var(--green);}
               <div class="dash-card-sub">Comp cheaper / SK cheaper / Equal by source</div>
             </div>
           </div>
-          <div class="dash-chart-box" style="height:220px;" id="src-split-wrap">
+          <div class="dash-chart-box" style="max-height:220px;overflow:hidden;" id="src-split-wrap">
             <div class="loading-state"><div class="spinner"></div>Waiting for data…</div>
           </div>
         </div>
@@ -627,6 +671,7 @@ select.fsel:focus{outline:none;border-color:var(--green);}
       <div id="crit-section" style="display:none;">
         <div class="crit-explain">
           <strong>Critical products</strong> are flagged in Price Master (<code>is_critical = 1</code>).
+          These charts are a <strong>subset</strong> of the main charts above — same bar style, same colour rules.
           <strong style="color:var(--red);">Positive gap ⚠</strong> = competitor more aggressive.
           <strong style="color:var(--green);">Negative gap ✓</strong> = SuperK better.
         </div>
@@ -639,22 +684,38 @@ select.fsel:focus{outline:none;border-color:var(--green);}
           <div class="crit-kpi"><div class="crit-kpi-lbl">Avg Gap Ag</div><div class="crit-kpi-val" id="ck-aa">—</div><div class="crit-kpi-sub">₹ diff</div></div>
         </div>
         <div class="dash-g2" style="margin-bottom:18px;">
-          <div class="dash-card">
+          <div class="dash-card" style="border-color:var(--crit-border);">
             <div class="dash-card-hd">
-              <div><div class="dash-card-title" style="color:var(--crit);">Critical — Discount Gap (MRP)</div>
-                   <div class="dash-card-sub">Comp % off vs SK % off · gap line overlay</div></div>
+              <div>
+                <div class="dash-card-title" style="color:var(--crit);">🔴 Critical — Discount Gap (MRP)
+                  <span class="chart-count-badge" id="crit-mrp-count"></span>
+                </div>
+                <div class="dash-card-sub">Subset of main MRP chart · all critical SKUs · same style</div>
+              </div>
               <button class="btn btn-ghost btn-sm" onclick="loadCritical()">↺</button>
             </div>
-            <div class="dash-chart-box" style="height:280px;" id="crit-mrp-wrap">
+            <div class="dash-chart-legend">
+              <span><span class="dcl-dot" style="background:rgba(192,57,43,0.8);"></span>Comp cheaper ⚠</span>
+              <span><span class="dcl-dot" style="background:rgba(26,127,75,0.8);"></span>SK cheaper ✓</span>
+            </div>
+            <div class="dash-chart-box" id="crit-mrp-wrap">
               <div class="loading-state"><div class="spinner"></div>Loading…</div>
             </div>
           </div>
-          <div class="dash-card">
+          <div class="dash-card" style="border-color:var(--crit-border);">
             <div class="dash-card-hd">
-              <div><div class="dash-card-title" style="color:var(--crit);">Critical — Price Diff (Agnostic)</div>
-                   <div class="dash-card-sub">Comp SP vs SK SP · ₹ diff line overlay</div></div>
+              <div>
+                <div class="dash-card-title" style="color:var(--crit);">🔴 Critical — Price Diff (Agnostic)
+                  <span class="chart-count-badge" id="crit-ag-count"></span>
+                </div>
+                <div class="dash-card-sub">Subset of main Agnostic chart · all critical SKUs · same style</div>
+              </div>
             </div>
-            <div class="dash-chart-box" style="height:280px;" id="crit-ag-wrap">
+            <div class="dash-chart-legend">
+              <span><span class="dcl-dot" style="background:rgba(192,57,43,0.8);"></span>Comp SP higher ⚠</span>
+              <span><span class="dcl-dot" style="background:rgba(26,127,75,0.8);"></span>SK SP lower ✓</span>
+            </div>
+            <div class="dash-chart-box" id="crit-ag-wrap">
               <div class="loading-state"><div class="spinner"></div>Loading…</div>
             </div>
           </div>
@@ -670,7 +731,7 @@ select.fsel:focus{outline:none;border-color:var(--green);}
             </div>
           </div>
           <div class="tbl-wrap">
-            <table><thead><tr>
+            <table id="crit-detail-table"><thead><tr>
               <th>SuperK ID</th><th>Product</th><th>Source</th><th>Mode</th>
               <th>Comp MRP</th><th>Comp SP</th><th>SK SP</th><th>Gap</th><th>Status</th>
             </tr></thead>
@@ -682,6 +743,297 @@ select.fsel:focus{outline:none;border-color:var(--green);}
       </div>
 
     </div><!-- /dashboard -->
+
+    <!-- ══════════ CHARTS TAB ════════════════════ -->
+    <div class="tab-panel" id="tab-charts">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div>
+          <div style="font-family:var(--disp);font-weight:700;font-size:18px;">Price Intelligence Charts</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">All SKUs · full width · filter by procurement category, source, mode · sortable</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="loadChartsTab()">↺ Refresh</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetChartFilters()">✕ Reset Filters</button>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="chart-filterbar">
+        <div class="cfilt-group">
+          <span class="cfilt-label">Procurement Category</span>
+          <select class="fsel" id="cf-cat" onchange="applyChartFilters()" style="min-width:180px;">
+            <option value="">All Categories</option>
+          </select>
+        </div>
+        <div class="cfilt-group">
+          <span class="cfilt-label">Source</span>
+          <select class="fsel" id="cf-src" onchange="applyChartFilters()">
+            <option value="">All Sources</option>
+            <option value="jio">🟡 JioMart</option>
+            <option value="bb">🟢 BigBasket</option>
+            <option value="dmart">🟠 DMart</option>
+          </select>
+        </div>
+        <div class="cfilt-group">
+          <span class="cfilt-label">Mode</span>
+          <select class="fsel" id="cf-mode" onchange="applyChartFilters()">
+            <option value="">All Modes</option>
+            <option value="mrp">MRP only</option>
+            <option value="agnostic">Agnostic only</option>
+          </select>
+        </div>
+        <div class="cfilt-group">
+          <span class="cfilt-label">Products</span>
+          <select class="fsel" id="cf-crit" onchange="applyChartFilters()">
+            <option value="">All Products</option>
+            <option value="critical">🔴 Critical Only</option>
+            <option value="normal">Normal Only</option>
+          </select>
+        </div>
+        <div class="cfilt-group">
+          <span class="cfilt-label">Sort By</span>
+          <select class="fsel" id="cf-sort" onchange="applyChartFilters()">
+            <option value="gap_desc">Gap ↓ (highest risk first)</option>
+            <option value="gap_asc">Gap ↑ (edge first)</option>
+            <option value="name">Product Name A-Z</option>
+            <option value="category">Category</option>
+          </select>
+        </div>
+        <div class="cfilt-group">
+          <span class="cfilt-label">MRP Gap Cap</span>
+          <select class="fsel" id="cf-cap" onchange="applyChartFilters()">
+            <option value="50">± 50%</option>
+            <option value="30">± 30%</option>
+            <option value="20">± 20%</option>
+            <option value="100">No cap</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Stats strip -->
+      <div class="chart-stats-strip">
+        <div class="cstat"><div class="cstat-val" id="cs-total" style="color:var(--ink);">—</div><div class="cstat-lbl">SKUs Shown</div></div>
+        <div class="cstat"><div class="cstat-val" id="cs-risk" style="color:var(--red);">—</div><div class="cstat-lbl">Comp Cheaper ⚠</div></div>
+        <div class="cstat"><div class="cstat-val" id="cs-edge" style="color:var(--green);">—</div><div class="cstat-lbl">SK Cheaper ✓</div></div>
+        <div class="cstat"><div class="cstat-val" id="cs-crit" style="color:var(--crit);">—</div><div class="cstat-lbl">Critical Flagged</div></div>
+        <div class="cstat"><div class="cstat-val" id="cs-avg" style="font-size:18px;">—</div><div class="cstat-lbl">Avg Gap</div></div>
+      </div>
+
+      <!-- MRP Chart card -->
+      <div class="chart-full-card" id="chart-mrp-section">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+          <div>
+            <div class="chart-full-title">Discount Gap — MRP Mode <span class="chart-count-badge" id="chart-mrp-count"></span></div>
+            <div class="chart-full-sub">Competitor % off MRP minus SuperK % off MRP · 🔴 border = critical SKU · sorted by gap</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div class="crit-avg-pill" id="chart-mrp-avg" style="font-size:11px;padding:4px 12px;">Avg —</div>
+            <label style="font-size:11px;font-family:var(--mono);display:flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="cf-crit-only" onchange="applyChartFilters()"> Critical only
+            </label>
+          </div>
+        </div>
+        <div class="dash-chart-legend">
+          <span><span class="dcl-dot" style="background:rgba(192,57,43,0.8);"></span>Comp cheaper ⚠</span>
+          <span><span class="dcl-dot" style="background:rgba(26,127,75,0.8);"></span>SK cheaper ✓</span>
+          <span><span class="dcl-dot" style="background:rgba(160,155,140,0.45);"></span>Equal</span>
+          <span><span class="dcl-dot" style="background:transparent;border:2px solid var(--crit);border-radius:3px;width:10px;height:10px;"></span>Critical SKU 🔴</span>
+        </div>
+        <div class="chart-scroll-zone" id="chart-mrp-wrap">
+          <div class="loading-state"><div class="spinner"></div>Loading MRP chart…</div>
+        </div>
+      </div>
+
+      <!-- Agnostic Chart card -->
+      <div class="chart-full-card" id="chart-ag-section">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+          <div>
+            <div class="chart-full-title">Price Difference — Agnostic Mode <span class="chart-count-badge" id="chart-ag-count"></span></div>
+            <div class="chart-full-sub">Comp SP minus SK SP (₹) · sorted by difference</div>
+          </div>
+          <div class="crit-avg-pill" id="chart-ag-avg" style="font-size:11px;padding:4px 12px;">Avg —</div>
+        </div>
+        <div class="dash-chart-legend">
+          <span><span class="dcl-dot" style="background:rgba(192,57,43,0.8);"></span>Comp SP higher ⚠</span>
+          <span><span class="dcl-dot" style="background:rgba(26,127,75,0.8);"></span>SK SP lower ✓</span>
+        </div>
+        <div class="chart-scroll-zone" id="chart-ag-wrap">
+          <div class="loading-state"><div class="spinner"></div>Loading Agnostic chart…</div>
+        </div>
+      </div>
+    </div><!-- /charts -->
+
+    <!-- ══════════ TRENDS TAB ════════════════════ -->
+    <div class="tab-panel" id="tab-trends">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div>
+          <div style="font-family:var(--disp);font-weight:700;font-size:18px;">Historical Price Trends</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">Sourced from PriceLens Backup sheet · auto-saved after each run</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" onclick="manualBackup()" style="background:var(--teal-bg);color:var(--teal);border:1px solid var(--teal-border);">💾 Backup Now</button>
+          <button class="btn btn-ghost btn-sm" onclick="initTrendsTab()">↺ Refresh</button>
+        </div>
+      </div>
+
+      <!-- Backup status card -->
+      <div class="backup-status-card">
+        <div class="backup-status-title">💾 Backup Status <span class="badge" id="backup-status-badge" style="background:var(--teal-bg);color:var(--teal);border:1px solid var(--teal-border);font-size:10px;padding:2px 8px;border-radius:10px;">Loading…</span></div>
+        <div class="backup-kpi-row">
+          <div class="backup-kpi"><div class="backup-kpi-val" id="bk-runs">—</div><div class="backup-kpi-lbl">Backup Runs</div></div>
+          <div class="backup-kpi"><div class="backup-kpi-val" id="bk-rows">—</div><div class="backup-kpi-lbl">Total Rows</div></div>
+          <div class="backup-kpi"><div class="backup-kpi-val" id="bk-skus">—</div><div class="backup-kpi-lbl">Unique SKUs</div></div>
+          <div class="backup-kpi"><div class="backup-kpi-val" id="bk-last" style="font-size:14px;margin-top:3px;">—</div><div class="backup-kpi-lbl">Last Backed</div></div>
+          <div class="backup-kpi"><div class="backup-kpi-val" id="bk-cats" style="font-size:20px;">—</div><div class="backup-kpi-lbl">Categories</div></div>
+        </div>
+      </div>
+
+      <!-- Trends filters -->
+      <div class="trends-filterbar">
+        <div class="trends-filterbar-title">🎯 Filter Trends</div>
+        <div class="trends-filtergrid">
+          <div class="cfilt-group">
+            <span class="cfilt-label">Category</span>
+            <select class="fsel" id="tf-cat" onchange="loadTrends()"><option value="">All Categories</option></select>
+          </div>
+          <div class="cfilt-group">
+            <span class="cfilt-label">Source</span>
+            <select class="fsel" id="tf-src" onchange="loadTrends()">
+              <option value="">All Sources</option>
+              <option value="JIO">🟡 JioMart</option>
+              <option value="BB">🟢 BigBasket</option>
+              <option value="DMART">🟠 DMart</option>
+            </select>
+          </div>
+          <div class="cfilt-group">
+            <span class="cfilt-label">Mode</span>
+            <select class="fsel" id="tf-mode" onchange="loadTrends()">
+              <option value="">All Modes</option>
+              <option value="MRP">MRP</option>
+              <option value="AGNOSTIC">Agnostic</option>
+            </select>
+          </div>
+          <div class="cfilt-group">
+            <span class="cfilt-label">Time Range</span>
+            <select class="fsel" id="tf-days" onchange="loadTrends()">
+              <option value="30">Last 30 days</option>
+              <option value="60">Last 60 days</option>
+              <option value="90" selected>Last 90 days</option>
+              <option value="180">Last 180 days</option>
+              <option value="365">Last 1 year</option>
+            </select>
+          </div>
+          <div style="align-self:flex-end;"><button class="btn btn-sm" onclick="loadTrends()" style="background:var(--teal);color:#fff;">Apply →</button></div>
+        </div>
+        <div style="margin-top:14px;">
+          <div class="cfilt-label" style="margin-bottom:6px;">SKU Search — add to trend chart (blank = top 8 most-volatile)</div>
+          <div class="sku-typeahead">
+            <input class="sku-input" id="sku-search-inp" placeholder="Type Superkid or product name…" oninput="skuTypeahead()" autocomplete="off"/>
+            <div class="sku-dd" id="sku-dd"></div>
+          </div>
+          <div class="sku-chips" id="sku-chips"></div>
+        </div>
+      </div>
+
+      <!-- Trend charts 2-col -->
+      <div class="trends-2col">
+        <div class="trend-card teal">
+          <div class="dash-card-hd" style="margin-bottom:10px;">
+            <div>
+              <div class="dash-card-title" style="color:var(--teal);">Discount Gap Over Time — MRP</div>
+              <div class="dash-card-sub">Comp % off MRP minus SK % off MRP · per run date</div>
+            </div>
+          </div>
+          <div class="trend-chart-area" id="tline-mrp-wrap">
+            <div class="trend-empty"><span style="font-size:26px;">📈</span>Load backup data to see trends</div>
+          </div>
+        </div>
+        <div class="trend-card teal">
+          <div class="dash-card-hd" style="margin-bottom:10px;">
+            <div>
+              <div class="dash-card-title" style="color:var(--teal);">Price Gap Over Time — Agnostic</div>
+              <div class="dash-card-sub">Comp SP minus SK SP (₹) · per run date</div>
+            </div>
+          </div>
+          <div class="trend-chart-area" id="tline-ag-wrap">
+            <div class="trend-empty"><span style="font-size:26px;">📈</span>Load backup data to see trends</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="trends-2col">
+        <div class="trend-card">
+          <div class="dash-card-hd" style="margin-bottom:10px;">
+            <div>
+              <div class="dash-card-title">Comp SP vs SK SP — Absolute</div>
+              <div class="dash-card-sub">Raw prices per SKU over time (solid=comp, dashed=SK)</div>
+            </div>
+          </div>
+          <div class="trend-chart-area" id="tline-abs-wrap">
+            <div class="trend-empty"><span style="font-size:26px;">💰</span>Select SKUs to compare absolute prices</div>
+          </div>
+        </div>
+        <div class="trend-card">
+          <div class="dash-card-hd" style="margin-bottom:10px;">
+            <div>
+              <div class="dash-card-title">Backup Run Log</div>
+              <div class="dash-card-sub">All runs saved to PriceLens Backup sheet</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadBackupRuns()">↺</button>
+          </div>
+          <div style="max-height:280px;overflow-y:auto;">
+            <table class="runs-mini-table" id="backup-runs-table">
+              <thead><tr><th>Run ID</th><th>Date</th><th>Rows</th><th>Status</th></tr></thead>
+              <tbody id="backup-runs-body"><tr><td colspan="4"><div class="empty" style="padding:10px;">Loading…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- History detail table -->
+      <div class="dash-card" style="margin-top:4px;">
+        <div class="dash-card-hd">
+          <div>
+            <div class="dash-card-title">Price History Detail</div>
+            <div class="dash-card-sub" id="hist-detail-sub">All backed-up results matching current filters</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <div class="search-wrap" style="max-width:200px;">
+              <input class="search-in" id="hist-search" placeholder="Search SKU / product…" oninput="filterHistTable()" style="margin:0;"/>
+              <button class="search-clr" onclick="document.getElementById('hist-search').value='';filterHistTable()">×</button>
+            </div>
+            <select class="fsel" id="hist-run-sel" onchange="filterHistTable()" style="font-size:11px;">
+              <option value="">All Runs</option>
+            </select>
+          </div>
+        </div>
+        <div class="hist-tbl-wrap">
+          <table id="hist-detail-table" style="table-layout:fixed;">
+            <thead><tr>
+              <th>Run ID<div class="col-resize-handle"></div></th>
+              <th>Date<div class="col-resize-handle"></div></th>
+              <th>SKU<div class="col-resize-handle"></div></th>
+              <th>Product<div class="col-resize-handle"></div></th>
+              <th>Category<div class="col-resize-handle"></div></th>
+              <th>Source<div class="col-resize-handle"></div></th>
+              <th>Mode<div class="col-resize-handle"></div></th>
+              <th>Comp SP<div class="col-resize-handle"></div></th>
+              <th>SK SP<div class="col-resize-handle"></div></th>
+              <th>Gap<div class="col-resize-handle"></div></th>
+              <th>Status<div class="col-resize-handle"></div></th>
+            </tr></thead>
+            <tbody id="hist-detail-body">
+              <tr><td colspan="11"><div class="empty"><div class="empty-icon">📈</div>Load trends to see history.</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <span class="page-info" id="hist-page-info"></span>
+          <button class="btn btn-ghost btn-sm" id="hist-prev-btn" onclick="histPage--;renderHistTable()">← Prev</button>
+          <button class="btn btn-ghost btn-sm" id="hist-next-btn" onclick="histPage++;renderHistTable()">Next →</button>
+        </div>
+      </div>
+    </div><!-- /trends -->
 
     <!-- ══════════ RUN ════════════════════════════ -->
     <div class="tab-panel" id="tab-run">
@@ -771,7 +1123,7 @@ select.fsel:focus{outline:none;border-color:var(--green);}
           <button class="btn btn-ghost btn-sm" onclick="loadHistory()">↺</button>
         </div>
         <div class="tbl-wrap">
-          <table><thead><tr>
+          <table id="history-table"><thead><tr>
             <th>#</th><th>Run ID</th><th>Mode</th><th>Source</th><th>SKUs</th>
             <th>Written</th><th>Errors</th><th>Duration</th><th>Stopped?</th><th>Timestamp</th>
           </tr></thead>
@@ -811,19 +1163,36 @@ select.fsel:focus{outline:none;border-color:var(--green);}
         <span><span class="delta-dn">−% ✓</span><span style="color:var(--muted);"> SK cheaper</span></span>
         <span style="color:var(--muted);">|</span>
         <span style="color:var(--crit);">🔴 = critical</span>
+        <span style="color:var(--muted);">|</span>
+        <span style="color:var(--muted);font-size:10px;">Drag column headers to resize</span>
       </div>
+
+      <!-- IMPROVED SEARCH BAR -->
       <div class="search-bar">
-        <input class="search-in" id="res-search" placeholder="Search product / superkid…" oninput="debounce(loadResults,380)()"/>
+        <div class="search-wrap" style="max-width:300px;">
+          <input class="search-in" id="res-search" placeholder="Search product, superkid, comp_id…"
+            oninput="onResSearch(this)"/>
+          <button class="search-clear" onclick="clearResSearch()" title="Clear search">×</button>
+        </div>
         <select class="fsel" id="res-crit" onchange="resPage=0;loadResults()">
           <option value="">All Products</option>
           <option value="1">🔴 Critical Only</option>
           <option value="0">Normal Only</option>
         </select>
-        <input class="search-in" id="res-runid" placeholder="Filter run_id…" style="max-width:180px;" oninput="debounce(loadResults,380)()"/>
-        <button class="btn btn-ghost btn-sm" onclick="resPage=0;loadResults()">↺</button>
+        <div class="search-wrap" style="max-width:180px;">
+          <input class="search-in" id="res-runid" placeholder="Filter run_id…"
+            oninput="onResRunIdSearch(this)"/>
+          <button class="search-clear" onclick="clearRunIdSearch()" title="Clear">×</button>
+        </div>
+        <span class="search-count" id="res-search-count" style="display:none;"></span>
+        <button class="btn btn-ghost btn-sm" onclick="resPage=0;loadResults()">↺ Refresh</button>
       </div>
+
+      <!-- active filter chips -->
+      <div id="res-filter-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:0;"></div>
+
       <div class="tbl-wrap">
-        <table>
+        <table id="res-table" style="table-layout:fixed;">
           <thead id="res-thead"><tr></tr></thead>
           <tbody id="res-body"><tr><td colspan="12"><div class="empty"><div class="empty-icon">📊</div>Loading…</div></td></tr></tbody>
         </table>
@@ -878,7 +1247,7 @@ select.fsel:focus{outline:none;border-color:var(--green);}
         DMart: set BenchMark=<code>dmart</code>, url=product page URL. Result columns auto-added after each run.</span>
       </div>
       <div class="search-bar">
-        <input class="search-in" id="mapper-search" placeholder="Filter superkid / comp_id…" oninput="filterMapperTable()"/>
+        <input class="search-in" id="mapper-search" placeholder="Filter superkid / comp_id…" oninput="filterMapperTable()" style="flex:1;"/>
         <select class="fsel" id="mapper-src-filter" onchange="filterMapperTable()">
           <option value="">All Sources</option>
           <option value="jio">🟡 JioMart</option>
@@ -977,7 +1346,6 @@ select.fsel:focus{outline:none;border-color:var(--green);}
           <div class="fg">
             <label class="fl">Default Pincode</label>
             <input class="fi" id="cfg-dmart-pin" placeholder="520013"/>
-            <div class="fhint">Used for guest location. Set via guest cookie d_info or reqId if needed.</div>
           </div>
           <div class="fg">
             <label class="fl">Impersonate Browser</label>
@@ -1012,10 +1380,20 @@ let dashSrcFilter='all';
 let dashMrpData=[], dashAgData=[];
 let selectedRunSrc='all';
 let mapperCounts={total:0,jio:0,bb:0,dmart:0};
+let resSearchTimer=null;
+let _resLastTotal=0;
+// Charts tab state
+let chartsMrpData=[],chartsAgData=[],categoriesList=[];
+// Trends tab state
+let trendsSkuMap={},trendsRunsList=[],selectedTrendSkus=new Set(),allSkuList=[];
+let histAllRows=[],histPage=0,histSkuTimer=null;
+const TREND_COLORS=['#1a7f4b','#1a5fa8','#b7710a','#c0392b','#6b3fa0','#0e7490','#d4380d','#2c7a2c','#c05621','#475569'];
 
 const PAGE_META={
   dashboard:{title:'Dashboard',sub:'JioMart 🟡 · BigBasket 🟢 · DMart Ready 🟠'},
-  run:      {title:'Run / Control',sub:'Source filter · Selective SKUs · Pause / Stop'},
+  charts:   {title:'Charts',sub:'Full-width SKU charts · filter by procurement category, source, mode'},
+  trends:   {title:'Price Trends',sub:'Historical backup data · line charts · per-SKU price evolution over time'},
+  run:      {title:'Run / Control',sub:'Auto-backup enabled · Source filter · Selective SKUs · Pause / Stop'},
   results:  {title:'Results',sub:'Live from Master Mapper result columns'},
   lookup:   {title:'SKU Lookup',sub:'Check Superkids + DMart price tester'},
   mapper:   {title:'Master Mapper',sub:'BenchMark · Superkid · Comp_id · url · pincode'},
@@ -1038,6 +1416,8 @@ function nav(tab) {
   if(tab==='slack')    loadSlackConfig();
   if(tab==='results')  {resPage=0;loadResults();}
   if(tab==='mapper')   loadMapperPreview();
+  if(tab==='charts')   loadChartsTab();
+  if(tab==='trends')   initTrendsTab();
 }
 
 function toast(msg,type='') {
@@ -1083,6 +1463,61 @@ function srcPill(r) {
   return `<span class="preview-pill bb">${esc(bm)}</span>`;
 }
 
+// Highlight search term in text
+function hlText(text, term) {
+  if(!term) return esc(text);
+  const safe=esc(text);
+  const safeTerm=term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return safe.replace(new RegExp(safeTerm,'gi'),m=>`<mark class="hl">${m}</mark>`);
+}
+
+// ══════════════════════════════════════════════
+//  RESIZABLE COLUMNS
+// ══════════════════════════════════════════════
+function initResizableColumns(tableId) {
+  const table = document.getElementById(tableId);
+  if(!table) return;
+  const ths = table.querySelectorAll('thead th');
+  ths.forEach(th => {
+    // Remove old handle
+    const old = th.querySelector('.col-resize-handle');
+    if(old) old.remove();
+    const handle = document.createElement('div');
+    handle.className = 'col-resize-handle';
+    th.appendChild(handle);
+
+    let startX=0, startW=0, isResizing=false;
+
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      isResizing = true;
+      startX = e.clientX;
+      startW = th.offsetWidth;
+      th.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const onMove = e2 => {
+        if(!isResizing) return;
+        const newW = Math.max(60, startW + (e2.clientX - startX));
+        th.style.width = newW + 'px';
+        th.style.minWidth = newW + 'px';
+        th.style.maxWidth = newW + 'px';
+      };
+      const onUp = () => {
+        isResizing = false;
+        th.classList.remove('resizing');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
+}
+
 // ══════════════════════════════════════════════
 //  CHART HELPERS
 // ══════════════════════════════════════════════
@@ -1117,82 +1552,169 @@ function lightTooltip() {
   };
 }
 
-function buildHBarChart(canvasId,wrapId,data,diffKey,emptyMsg) {
+/**
+ * Universal horizontal bar chart.
+ * Shows ALL valid rows (no slice limit), sorted by diff descending.
+ * For MRP mode: filters out rows where |diff| > 50% (noise).
+ * Critical items get a red border on their bar.
+ * countBadgeId: optional element id to update with count.
+ */
+function buildHBarChart(canvasId, wrapId, data, diffKey, emptyMsg, countBadgeId, isCritSubset) {
   const wrap=document.getElementById(wrapId);
   if(!wrap) return;
-  const valid=validRows(data,diffKey);
-  if(!valid.length){showChartEmpty(wrapId,emptyMsg||'No data.');return;}
-
-  const sorted=[...valid].sort((a,b)=>parseFloat(b[diffKey]||0)-parseFloat(a[diffKey]||0));
-  const rows=sorted.slice(0,30);
-  const gaps=rows.map(r=>parseFloat(r[diffKey]));
-  const labels=rows.map(r=>{
-    const src=srcOf(r);
-    const icon=src==='dmart'?'🟠':src==='jio'?'🟡':'🟢';
-    const n=r.product_name||r.name||'';
-    const short=n.length>28?n.slice(0,27)+'…':(n||r.Superkid||r.superkid||'—');
-    return icon+' '+short;
-  });
-
-  const barH=26;
-  const h=Math.max(320,rows.length*(barH+12)+100);
-  wrap.style.height=h+'px';wrap.innerHTML='';
-  const canvas=document.createElement('canvas');canvas.id=canvasId;wrap.appendChild(canvas);
-  if(charts[canvasId]) charts[canvasId].destroy();
-
   const isMrp=diffKey==='diff_pct_off';
 
-  const bg=gaps.map(g=>g>0.3?'rgba(192,57,43,0.82)':g<-0.3?'rgba(26,127,75,0.82)':'rgba(160,155,140,0.42)');
-  const bd=gaps.map(g=>g>0.3?'rgba(150,35,25,0.9)':g<-0.3?'rgba(15,90,45,0.9)':'rgba(110,106,98,0.5)');
+  let valid=validRows(data, diffKey);
+
+  // For MRP mode: cap at ±50% to filter outliers/noise
+  if(isMrp) {
+    valid = valid.filter(r => Math.abs(parseFloat(r[diffKey]||0)) <= 50);
+  }
+
+  if(!valid.length){
+    showChartEmpty(wrapId, emptyMsg||'No data.');
+    if(countBadgeId) { const el=document.getElementById(countBadgeId); if(el) el.textContent=''; }
+    return;
+  }
+
+  // Sort descending by diff (highest risk first)
+  const sorted=[...valid].sort((a,b)=>parseFloat(b[diffKey]||0)-parseFloat(a[diffKey]||0));
+
+  if(countBadgeId) {
+    const el=document.getElementById(countBadgeId);
+    if(el) el.textContent=sorted.length+' SKUs';
+  }
+
+  const gaps=sorted.map(r=>parseFloat(r[diffKey]));
+  const labels=sorted.map(r=>{
+    const src=srcOf(r);
+    const icon=src==='dmart'?'🟠':src==='jio'?'🟡':'🟢';
+    const critMark=String(r.is_critical||'0')==='1'?'🔴 ':'';
+    const n=r.product_name||r.name||'';
+    const short=n.length>28?n.slice(0,27)+'…':(n||r.Superkid||r.superkid||'—');
+    return critMark+icon+' '+short;
+  });
+
+  const BAR_H = 22;
+  const h = Math.max(280, sorted.length * (BAR_H + 10) + 90);
+  wrap.style.height = h + 'px';
+  wrap.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvas.id = canvasId;
+  canvas.style.display = 'block';
+  wrap.appendChild(canvas);
+  if(charts[canvasId]) charts[canvasId].destroy();
+
+  // Color: risk=red, edge=green, neutral=grey
+  // Critical items: stronger saturation + red border
+  const bg = sorted.map((r,i) => {
+    const g=gaps[i];
+    const isCrit=String(r.is_critical||'0')==='1';
+    if(g>0.3)  return isCrit?'rgba(185,28,28,0.88)':'rgba(192,57,43,0.78)';
+    if(g<-0.3) return isCrit?'rgba(15,90,45,0.88)':'rgba(26,127,75,0.78)';
+    return isCrit?'rgba(130,120,105,0.55)':'rgba(160,155,140,0.38)';
+  });
+  const bd = sorted.map((r,i) => {
+    const isCrit=String(r.is_critical||'0')==='1';
+    const g=gaps[i];
+    if(isCrit) return 'rgba(185,28,28,0.95)'; // always red border for crit
+    if(g>0.3)  return 'rgba(150,35,25,0.9)';
+    if(g<-0.3) return 'rgba(15,90,45,0.9)';
+    return 'rgba(110,106,98,0.45)';
+  });
+  const bw = sorted.map(r => String(r.is_critical||'0')==='1' ? 2 : 1);
 
   charts[canvasId]=new Chart(canvas.getContext('2d'),{
     type:'bar',
-    data:{labels,datasets:[{data:gaps,backgroundColor:bg,borderColor:bd,borderWidth:1,
-      borderRadius:{topRight:4,bottomRight:4,topLeft:0,bottomLeft:0},borderSkipped:false,barThickness:barH}]},
+    data:{
+      labels,
+      datasets:[{
+        data:gaps,
+        backgroundColor:bg,
+        borderColor:bd,
+        borderWidth:bw,
+        borderRadius:{topRight:4,bottomRight:4,topLeft:0,bottomLeft:0},
+        borderSkipped:false,
+        barThickness:BAR_H,
+      }]
+    },
     options:{
       indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      layout:{padding:{right:52,left:4,top:6,bottom:6}},
-      animation:{duration:400,easing:'easeOutQuart'},
+      layout:{padding:{right:56,left:4,top:6,bottom:6}},
+      animation:{duration:350,easing:'easeOutQuart'},
       plugins:{
         legend:{display:false},
-        tooltip:{...lightTooltip(),callbacks:{
-          title:items=>{const r=rows[items[0].dataIndex];return r.product_name||r.name||r.Superkid||'';},
-          label:ctx=>{
-            const v=ctx.raw;const r=rows[ctx.dataIndex];const src=srcOf(r);const out=[];
-            if(isMrp){
-              out.push(v>0?'Gap: +'+v.toFixed(2)+'%  comp cheaper ⚠':v<0?'Gap: '+v.toFixed(2)+'%  SK cheaper ✓':'Gap: 0%  equal');
-              if(r.comp_pct_off!=null) out.push('Comp off: '+parseFloat(r.comp_pct_off).toFixed(1)+'%');
-              if(r.sk_pct_off!=null)   out.push('SK off:   '+parseFloat(r.sk_pct_off).toFixed(1)+'%');
-            }else{
-              out.push(v>0?'Diff: +₹'+v.toFixed(2)+'  comp cheaper ⚠':v<0?'Diff: ₹'+v.toFixed(2)+'  SK cheaper ✓':'Diff: ₹0  equal');
-              if(r.comp_sp!=null) out.push('Comp SP: ₹'+parseFloat(r.comp_sp).toFixed(2));
-              if(r.sk_sp!=null)   out.push('SK SP:   ₹'+parseFloat(r.sk_sp).toFixed(2));
+        tooltip:{
+          ...lightTooltip(),
+          callbacks:{
+            title:items=>{
+              const r=sorted[items[0].dataIndex];
+              const crit=String(r.is_critical||'0')==='1'?'🔴 CRITICAL · ':'';
+              return crit+(r.product_name||r.name||r.Superkid||'');
+            },
+            label:ctx=>{
+              const v=ctx.raw;
+              const r=sorted[ctx.dataIndex];
+              const src=srcOf(r);
+              const out=[];
+              if(isMrp){
+                out.push(v>0?'Gap: +'+v.toFixed(2)+'%  comp cheaper ⚠':v<0?'Gap: '+v.toFixed(2)+'%  SK cheaper ✓':'Gap: 0%  equal');
+                if(r.comp_pct_off!=null&&r.comp_pct_off!=='') out.push('Comp off: '+parseFloat(r.comp_pct_off).toFixed(1)+'%');
+                if(r.sk_pct_off  !=null&&r.sk_pct_off  !='') out.push('SK off:   '+parseFloat(r.sk_pct_off).toFixed(1)+'%');
+              }else{
+                out.push(v>0?'Diff: +₹'+v.toFixed(2)+'  comp cheaper ⚠':v<0?'Diff: ₹'+v.toFixed(2)+'  SK cheaper ✓':'Diff: ₹0  equal');
+                if(r.comp_sp!=null&&r.comp_sp!='') out.push('Comp SP: ₹'+parseFloat(r.comp_sp).toFixed(2));
+                if(r.sk_sp  !=null&&r.sk_sp  !='') out.push('SK SP:   ₹'+parseFloat(r.sk_sp).toFixed(2));
+              }
+              out.push('Source: '+src.toUpperCase());
+              return out;
             }
-            out.push('Source: '+src.toUpperCase());
-            return out;
           }
-        }}
+        }
       },
       scales:{
-        x:{position:'top',grid:{color:gridColor(),lineWidth:1,drawBorder:false},border:{display:false},
-           ticks:{font:chartFont(10,'400',true),color:'#9a9790',padding:4,maxTicksLimit:8,
-             callback:v=>isMrp?(v>0?'+':'')+v.toFixed(0)+'%':(v>=0?'+₹':'-₹')+Math.abs(v).toFixed(0)},
-           title:{display:true,text:'← SK cheaper (edge)          Competitor cheaper (risk) →',
-             color:'#c0bdb2',font:chartFont(10,'400',true),padding:{bottom:6}}},
-        y:{grid:{display:false},border:{display:false},
-           ticks:{font:chartFont(11,'500'),color:'#2e2d28',padding:10}},
+        x:{
+          position:'top',
+          grid:{color:gridColor(),lineWidth:1,drawBorder:false},
+          border:{display:false},
+          ticks:{font:chartFont(10,'400',true),color:'#9a9790',padding:4,maxTicksLimit:8,
+            callback:v=>isMrp?(v>0?'+':'')+v.toFixed(0)+'%':(v>=0?'+₹':'-₹')+Math.abs(v).toFixed(0)},
+          title:{
+            display:true,
+            text:'← SK cheaper (edge)          Competitor cheaper (risk) →',
+            color:'#c0bdb2',font:chartFont(10,'400',true),padding:{bottom:6}
+          }
+        },
+        y:{
+          grid:{display:false},
+          border:{display:false},
+          ticks:{font:chartFont(11,'500'),color:'#2e2d28',padding:10}
+        }
       }
     }
   });
 }
 
+// Convenience wrappers
 function buildMRPSkuChart(rawData){
   buildHBarChart('chart-mrp-sku','mrp-chart-wrap',rawData,'diff_pct_off',
-    'No valid MRP results'+(dashSrcFilter!=='all'?' for '+dashSrcFilter.toUpperCase():'')+'. Run the scraper first.');
+    'No valid MRP results'+(dashSrcFilter!=='all'?' for '+dashSrcFilter.toUpperCase():'')+'. Run the scraper first.',
+    'mrp-chart-count');
 }
 function buildAGSkuChart(rawData){
   buildHBarChart('chart-ag-sku','ag-chart-wrap',rawData,'diff_sp',
-    'No valid Agnostic results'+(dashSrcFilter!=='all'?' for '+dashSrcFilter.toUpperCase():'')+'. Run the scraper first.');
+    'No valid Agnostic results'+(dashSrcFilter!=='all'?' for '+dashSrcFilter.toUpperCase():'')+'. Run the scraper first.',
+    'ag-chart-count');
+}
+
+// Critical chart wrappers — same style, subset of main data
+function buildCritMRPChart(rows){
+  buildHBarChart('chart-crit-mrp','crit-mrp-wrap',rows,'diff_pct_off',
+    'No valid critical MRP data.','crit-mrp-count',true);
+}
+function buildCritAGChart(rows){
+  buildHBarChart('chart-crit-ag','crit-ag-wrap',rows,'diff_sp',
+    'No valid critical Agnostic data.','crit-ag-count',true);
 }
 
 // ── Per-source mini breakdown ─────────────────
@@ -1238,7 +1760,7 @@ function buildSrcSplitChart() {
 
   const wrap=document.getElementById('src-split-wrap');
   if(!wrap) return;
-  wrap.style.height='220px';wrap.innerHTML='';
+  wrap.innerHTML='';
   const canvas=document.createElement('canvas');canvas.id='chart-src-split';wrap.appendChild(canvas);
   if(charts['srcSplit']) charts['srcSplit'].destroy();
 
@@ -1247,8 +1769,8 @@ function buildSrcSplitChart() {
     data:{
       labels:['🟡 JioMart','🟢 BigBasket','🟠 DMart'],
       datasets:[
-        {label:'Comp cheaper ⚠',data:[jio.risk,bb.risk,dm.risk],   backgroundColor:'rgba(192,57,43,0.80)',borderColor:'rgba(150,35,25,0.9)',borderWidth:1,borderRadius:4},
-        {label:'SK cheaper ✓',   data:[jio.edge,bb.edge,dm.edge],  backgroundColor:'rgba(26,127,75,0.80)', borderColor:'rgba(15,90,45,0.9)', borderWidth:1,borderRadius:4},
+        {label:'Comp cheaper ⚠',data:[jio.risk,bb.risk,dm.risk],backgroundColor:'rgba(192,57,43,0.80)',borderColor:'rgba(150,35,25,0.9)',borderWidth:1,borderRadius:4},
+        {label:'SK cheaper ✓',   data:[jio.edge,bb.edge,dm.edge],backgroundColor:'rgba(26,127,75,0.80)',borderColor:'rgba(15,90,45,0.9)',borderWidth:1,borderRadius:4},
         {label:'Equal',          data:[jio.neutral,bb.neutral,dm.neutral],backgroundColor:'rgba(160,155,140,0.35)',borderColor:'rgba(110,106,98,0.5)',borderWidth:1,borderRadius:4},
       ]
     },
@@ -1269,78 +1791,6 @@ function buildSrcSplitChart() {
   });
 }
 
-function buildCritMRPChart(top10) {
-  const rows=top10.filter(r=>{const v=parseFloat(r.diff_pct_off);return !isNaN(v)&&!(r.status||'').toUpperCase().startsWith('ERROR');});
-  const wrap=document.getElementById('crit-mrp-wrap');
-  if(!wrap) return;
-  if(!rows.length){showChartEmpty('crit-mrp-wrap','No valid critical MRP data.');return;}
-  const h=Math.max(300,rows.length*52+100);
-  wrap.style.height=h+'px';wrap.innerHTML='';
-  const canvas=document.createElement('canvas');canvas.id='chart-crit-mrp';wrap.appendChild(canvas);
-  if(charts['critMrp']) charts['critMrp'].destroy();
-  const labels=rows.map(r=>{const n=r.product_name||r.name||'';return n.length>26?n.slice(0,25)+'…':n||'—';});
-  const compPct=rows.map(r=>parseFloat(r.comp_pct_off||0));
-  const skPct  =rows.map(r=>parseFloat(r.sk_pct_off||0));
-  const gaps   =rows.map(r=>parseFloat(r.diff_pct_off||0));
-  charts['critMrp']=new Chart(canvas.getContext('2d'),{
-    type:'bar',data:{labels,datasets:[
-      {label:'Comp % off',data:compPct,backgroundColor:'rgba(192,57,43,0.70)',borderColor:'rgba(150,35,25,0.9)',borderWidth:1,borderRadius:4,barThickness:14,yAxisID:'y'},
-      {label:'SK % off',  data:skPct,  backgroundColor:'rgba(26,127,75,0.70)', borderColor:'rgba(15,90,45,0.9)', borderWidth:1,borderRadius:4,barThickness:14,yAxisID:'y'},
-      {label:'Gap (%)',data:gaps,type:'line',borderColor:'#b7710a',backgroundColor:'rgba(183,113,10,0.06)',
-       borderWidth:2.5,pointRadius:5,pointHoverRadius:7,tension:0.3,yAxisID:'y2',fill:false,
-       pointBackgroundColor:gaps.map(g=>g>0?'#c0392b':'#1a7f4b'),pointBorderColor:'#fff',pointBorderWidth:2},
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:8,right:20}},animation:{duration:400},
-      plugins:{
-        legend:{position:'top',align:'start',labels:{font:chartFont(11),color:'#5c5a52',boxWidth:12,boxHeight:12,padding:16,usePointStyle:true,pointStyle:'rect'}},
-        tooltip:{...lightTooltip(),callbacks:{title:items=>rows[items[0].dataIndex]?.product_name||labels[items[0].dataIndex],
-          label:ctx=>ctx.dataset.label==='Gap (%)'?'Gap: '+(ctx.raw>0?'+':'')+ctx.raw.toFixed(2)+'% '+(ctx.raw>0?'⚠':'✓'):ctx.dataset.label+': '+ctx.raw.toFixed(1)+'%'}}
-      },
-      scales:{
-        x:{ticks:{font:chartFont(10,'500'),color:'#2e2d28',maxRotation:35},grid:{color:gridColor()},border:{display:false}},
-        y:{position:'left',ticks:{font:chartFont(9,'400',true),color:'#9a9790',callback:v=>v+'%'},grid:{color:gridColor()},border:{display:false},title:{display:true,text:'Discount %',color:'#b0ad9e',font:chartFont(9)}},
-        y2:{position:'right',ticks:{font:chartFont(9,'400',true),color:'#b7710a',callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%'},grid:{drawOnChartArea:false},border:{display:false},title:{display:true,text:'Gap %',color:'#b7710a',font:chartFont(9)}},
-      }
-    }
-  });
-}
-
-function buildCritAGChart(top10) {
-  const rows=top10.filter(r=>{const v=parseFloat(r.diff_sp);return !isNaN(v)&&!(r.status||'').toUpperCase().startsWith('ERROR');});
-  const wrap=document.getElementById('crit-ag-wrap');
-  if(!wrap) return;
-  if(!rows.length){showChartEmpty('crit-ag-wrap','No valid critical Agnostic data.');return;}
-  const h=Math.max(300,rows.length*52+100);
-  wrap.style.height=h+'px';wrap.innerHTML='';
-  const canvas=document.createElement('canvas');canvas.id='chart-crit-ag';wrap.appendChild(canvas);
-  if(charts['critAg']) charts['critAg'].destroy();
-  const labels=rows.map(r=>{const n=r.product_name||r.name||'';return n.length>26?n.slice(0,25)+'…':n||'—';});
-  const compSP=rows.map(r=>parseFloat(r.comp_sp||0));
-  const skSP  =rows.map(r=>parseFloat(r.sk_sp||0));
-  const diffs =rows.map(r=>parseFloat(r.diff_sp||0));
-  charts['critAg']=new Chart(canvas.getContext('2d'),{
-    type:'bar',data:{labels,datasets:[
-      {label:'Comp SP (₹)',data:compSP,backgroundColor:'rgba(192,57,43,0.70)',borderColor:'rgba(150,35,25,0.9)',borderWidth:1,borderRadius:4,barThickness:14,yAxisID:'y'},
-      {label:'SK SP (₹)',  data:skSP,  backgroundColor:'rgba(26,127,75,0.70)', borderColor:'rgba(15,90,45,0.9)', borderWidth:1,borderRadius:4,barThickness:14,yAxisID:'y'},
-      {label:'Diff (₹)',data:diffs,type:'line',borderColor:'#b7710a',backgroundColor:'rgba(183,113,10,0.06)',
-       borderWidth:2.5,pointRadius:5,pointHoverRadius:7,tension:0.3,yAxisID:'y2',fill:false,
-       pointBackgroundColor:diffs.map(d=>d>0?'#c0392b':'#1a7f4b'),pointBorderColor:'#fff',pointBorderWidth:2},
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:8,right:20}},animation:{duration:400},
-      plugins:{
-        legend:{position:'top',align:'start',labels:{font:chartFont(11),color:'#5c5a52',boxWidth:12,boxHeight:12,padding:16,usePointStyle:true,pointStyle:'rect'}},
-        tooltip:{...lightTooltip(),callbacks:{title:items=>rows[items[0].dataIndex]?.product_name||labels[items[0].dataIndex],
-          label:ctx=>ctx.dataset.label.includes('Diff')?'Diff: '+(ctx.raw>0?'+₹':'-₹')+Math.abs(ctx.raw).toFixed(2)+' '+(ctx.raw>0?'⚠':'✓'):ctx.dataset.label+': ₹'+ctx.raw.toFixed(2)}}
-      },
-      scales:{
-        x:{ticks:{font:chartFont(10,'500'),color:'#2e2d28',maxRotation:35},grid:{color:gridColor()},border:{display:false}},
-        y:{position:'left',ticks:{font:chartFont(9,'400',true),color:'#9a9790',callback:v=>'₹'+v},grid:{color:gridColor()},border:{display:false},title:{display:true,text:'Price (₹)',color:'#b0ad9e',font:chartFont(9)}},
-        y2:{position:'right',ticks:{font:chartFont(9,'400',true),color:'#b7710a',callback:v=>(v>=0?'+₹':'-₹')+Math.abs(v).toFixed(1)},grid:{drawOnChartArea:false},border:{display:false},title:{display:true,text:'Diff (₹)',color:'#b7710a',font:chartFont(9)}},
-      }
-    }
-  });
-}
-
 // ── Dashboard source filter ───────────────────
 function dashSrcTab(src,btn) {
   dashSrcFilter=src;
@@ -1352,8 +1802,8 @@ function dashSrcTab(src,btn) {
 function applyDashFilter() {
   let mrp=dashMrpData, ag=dashAgData;
   if(dashSrcFilter!=='all'){mrp=mrp.filter(r=>srcOf(r)===dashSrcFilter);ag=ag.filter(r=>srcOf(r)===dashSrcFilter);}
-  buildMRPSkuChart(mrp.slice(0,30));
-  buildAGSkuChart(ag.slice(0,30));
+  buildMRPSkuChart(mrp);
+  buildAGSkuChart(ag);
   buildSrcSplitChart();
   buildSrcMiniCards();
 }
@@ -1373,8 +1823,9 @@ function renderTopRiskTable(rawRows) {
     const gap    =parseFloat(r.diff_pct_off||0);
     const name   =r.product_name||r.name||'—';
     const skuid  =r.id||r.Superkid||r.superkid||'—';
-    return '<tr>'+
-      '<td><code style="color:var(--blue);font-size:11px;">'+esc(skuid)+'</code></td>'+
+    const isCrit =String(r.is_critical||'0')==='1';
+    return '<tr style="'+(isCrit?'background:var(--crit-bg);':'')+'">'+
+      '<td><code style="color:var(--blue);font-size:11px;">'+(isCrit?'🔴 ':'')+esc(skuid)+'</code></td>'+
       '<td class="name" style="max-width:160px;">'+esc(name)+'</td>'+
       '<td>'+srcPill(r)+'</td>'+
       '<td>'+compPct+'%</td>'+
@@ -1407,24 +1858,26 @@ async function loadStats() {
     document.getElementById('ms-bb').textContent   =(mp.bb||0).toLocaleString();
     document.getElementById('ms-dmart').textContent=(mp.dmart||0).toLocaleString();
     document.getElementById('ms-done').textContent =((m.rows||0)+(ag.rows||0)).toLocaleString();
-    // Update run-tab source counts
     document.getElementById('rsrc-cnt-all').textContent  =mp.total||0;
     document.getElementById('rsrc-cnt-jio').textContent  =mp.jio||0;
     document.getElementById('rsrc-cnt-bb').textContent   =mp.bb||0;
     document.getElementById('rsrc-cnt-dmart').textContent=mp.dmart||0;
     mapperCounts={total:mp.total||0,jio:mp.jio||0,bb:mp.bb||0,dmart:mp.dmart||0};
-    // Avg pills
     const ma=m.avg_diff,aa=ag.avg_diff;
     const mp2=document.getElementById('mrp-avg-pill');
-    mp2.textContent=ma!=null?'Avg '+(ma>=0?'+':'')+ma.toFixed(2)+'%':'Avg —';
-    mp2.style.background=ma!=null&&ma>0?'var(--red-bg)':'var(--green-bg)';
-    mp2.style.color=ma!=null&&ma>0?'var(--red)':'var(--green)';
-    mp2.style.borderColor=ma!=null&&ma>0?'var(--red-border)':'var(--green-border)';
+    if(mp2){
+      mp2.textContent=ma!=null?'Avg '+(ma>=0?'+':'')+ma.toFixed(2)+'%':'Avg —';
+      mp2.style.background=ma!=null&&ma>0?'var(--red-bg)':'var(--green-bg)';
+      mp2.style.color=ma!=null&&ma>0?'var(--red)':'var(--green)';
+      mp2.style.borderColor=ma!=null&&ma>0?'var(--red-border)':'var(--green-border)';
+    }
     const ap=document.getElementById('ag-avg-pill');
-    ap.textContent=aa!=null?'Avg '+(aa>=0?'+₹':'-₹')+Math.abs(aa).toFixed(2):'Avg —';
-    ap.style.background=aa!=null&&aa>0?'var(--red-bg)':'var(--green-bg)';
-    ap.style.color=aa!=null&&aa>0?'var(--red)':'var(--green)';
-    ap.style.borderColor=aa!=null&&aa>0?'var(--red-border)':'var(--green-border)';
+if(ap){
+  ap.textContent=aa!=null?'Avg '+(aa>=0?'+₹':'-₹')+Math.abs(aa).toFixed(2):'Avg —';
+  ap.style.background=aa!=null&&aa>0?'var(--red-bg)':'var(--green-bg)';
+  ap.style.color=aa!=null&&aa>0?'var(--red)':'var(--green)';
+  ap.style.borderColor=aa!=null&&aa>0?'var(--red-border)':'var(--green-border)';
+}
     loadDashCharts();
   } catch(e){setConn(false);}
 }
@@ -1432,12 +1885,12 @@ async function loadStats() {
 async function loadDashCharts() {
   try {
     const [rm,ra]=await Promise.all([
-      fetch('/api/results?mode=mrp&page=0&limit=2000'),
-      fetch('/api/results?mode=agnostic&page=0&limit=2000'),
+      fetch('/api/results?mode=mrp&page=0&limit=5000'),
+      fetch('/api/results?mode=agnostic&page=0&limit=5000'),
     ]);
     const [dm,da]=await Promise.all([rm.json(),ra.json()]);
-    if(dm.ok&&dm.data) dashMrpData=dm.data;
-    if(da.ok&&da.data) dashAgData =da.data;
+    if(dm.ok&&dm.data){dashMrpData=dm.data;chartsMrpData=dm.data;}
+    if(da.ok&&da.data){dashAgData=da.data;chartsAgData=da.data;}
     renderTopRiskTable(dashMrpData);
     applyDashFilter();
   } catch(e){console.error('[PriceLens] loadDashCharts:',e);}
@@ -1469,8 +1922,14 @@ async function loadCritical() {
     const aaEl=document.getElementById('ck-aa');
     aaEl.textContent=ag.avg!=null?(ag.avg>=0?'+₹':'-₹')+Math.abs(ag.avg).toFixed(2):'—';
     aaEl.className='crit-kpi-val '+(ag.avg>0?'v-red':ag.avg<0?'v-green':'v-muted');
-    buildCritMRPChart(m.top10||[]);
-    buildCritAGChart(ag.top10||[]);
+
+    // Use same horizontal bar style — critical charts are subsets of main charts
+    // Pass all critical rows (not just top10)
+    const mrpRows = d.mrp_rows||[];
+    const agRows  = d.ag_rows||[];
+    buildCritMRPChart(mrpRows);
+    buildCritAGChart(agRows);
+
     renderCritTable();
     toast(`✅ ${(m.count||0)+(ag.count||0)} critical rows`,'ok');
   } catch(e){toast('❌ '+e.message,'err');}
@@ -1498,6 +1957,7 @@ function renderCritTable() {
       <td>${r.status==='OK'?'<span class="badge bm">OK</span>':`<span class="badge bn">${esc((r.status||'').slice(0,18))}</span>`}</td>
     </tr>`;
   }).join('');
+  initResizableColumns('crit-detail-table');
 }
 function filterCritTable(){renderCritTable();}
 
@@ -1605,7 +2065,14 @@ async function pollStatus() {
       activeRunning=false;activePaused=false;
       hideRunPanel();disableRunBtns(false);
       loadHistory();loadStats();
-      toast('✅ Run complete — results written to Master Mapper','ok');
+      // Auto-backup results to backup sheet
+      try{
+        const runId=d?.last_run_id||d?.run_id||('AUTO_'+Date.now());
+        const rb=await fetch('/api/backup/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({run_id:runId})});
+        const db=await rb.json();
+        if(db.ok) toast(`✅ Run complete · ${db.rows_written} rows backed up 💾`,'ok');
+        else toast('✅ Run complete (backup: '+db.msg+')','ok');
+      }catch(e){toast('✅ Run complete — results written to Master Mapper','ok');}
     }
     await fetchLog();
   } catch(e){}
@@ -1652,19 +2119,80 @@ async function loadHistory() {
       <td>${h.stopped?'<span class="badge bn">Stopped</span>':'<span class="badge bm">Complete</span>'}</td>
       <td style="font-size:11px;">${h.timestamp}</td>
     </tr>`).join('');
+    initResizableColumns('history-table');
   } catch(e){}
 }
 
 // ══════════════════════════════════════════════
-//  RESULTS
+//  RESULTS — IMPROVED SEARCH
 // ══════════════════════════════════════════════
-function switchResTab(mode){currentResTab=mode;resPage=0;document.querySelectorAll('.subtab-bar .subtab').forEach(s=>s.classList.remove('active'));document.querySelector('.st-'+mode).classList.add('active');loadResults();}
-function switchResSrc(src,btn){currentResSrc=src;resPage=0;document.querySelectorAll('#rf-all,#rf-jio,#rf-bb,#rf-dmart').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadResults();}
+function onResSearch(inp) {
+  clearTimeout(resSearchTimer);
+  resSearchTimer = setTimeout(() => { resPage=0; loadResults(); }, 320);
+  updateFilterChips();
+}
+
+function onResRunIdSearch(inp) {
+  clearTimeout(resSearchTimer);
+  resSearchTimer = setTimeout(() => { resPage=0; loadResults(); }, 320);
+  updateFilterChips();
+}
+
+function clearResSearch() {
+  document.getElementById('res-search').value='';
+  resPage=0; loadResults(); updateFilterChips();
+}
+function clearRunIdSearch() {
+  document.getElementById('res-runid').value='';
+  resPage=0; loadResults(); updateFilterChips();
+}
+
+function updateFilterChips() {
+  const chips=document.getElementById('res-filter-chips');
+  if(!chips) return;
+  const parts=[];
+  const q=document.getElementById('res-search')?.value.trim();
+  const rid=document.getElementById('res-runid')?.value.trim();
+  const crit=document.getElementById('res-crit')?.value;
+  if(q) parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:12px;font-size:11px;font-family:var(--mono);color:var(--amber);">search: ${esc(q)}<button onclick="clearResSearch()" style="background:none;border:none;cursor:pointer;color:var(--amber);padding:0 0 0 4px;font-size:12px;">×</button></span>`);
+  if(rid) parts.push(`<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:12px;font-size:11px;font-family:var(--mono);color:var(--blue);">run: ${esc(rid)}<button onclick="clearRunIdSearch()" style="background:none;border:none;cursor:pointer;color:var(--blue);padding:0 0 0 4px;font-size:12px;">×</button></span>`);
+  if(crit==='1') parts.push(`<span style="padding:3px 9px;background:var(--crit-bg);border:1px solid var(--crit-border);border-radius:12px;font-size:11px;font-family:var(--mono);color:var(--crit);">🔴 critical only</span>`);
+  chips.innerHTML=parts.join('');
+  chips.style.minHeight=parts.length?'24px':'0';
+}
+
+function updateSearchCount(total, shown) {
+  const el=document.getElementById('res-search-count');
+  if(!el) return;
+  const q=document.getElementById('res-search')?.value.trim();
+  const rid=document.getElementById('res-runid')?.value.trim();
+  const crit=document.getElementById('res-crit')?.value;
+  if(q||rid||crit){
+    el.style.display='flex';
+    el.textContent=total+' matches';
+    el.className='search-count'+(total>0?' has-results':'');
+  } else {
+    el.style.display='none';
+  }
+}
+
+function switchResTab(mode){
+  currentResTab=mode;resPage=0;
+  document.querySelectorAll('.subtab-bar .subtab').forEach(s=>s.classList.remove('active'));
+  document.querySelector('.st-'+mode).classList.add('active');
+  loadResults();
+}
+function switchResSrc(src,btn){
+  currentResSrc=src;resPage=0;
+  document.querySelectorAll('#rf-all,#rf-jio,#rf-bb,#rf-dmart').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  loadResults();
+}
 
 async function loadResults() {
-  const search=document.getElementById('res-search')?.value||'';
+  const search=(document.getElementById('res-search')?.value||'').trim();
   const crit  =document.getElementById('res-crit')?.value  ||'';
-  const rid   =document.getElementById('res-runid')?.value ||'';
+  const rid   =(document.getElementById('res-runid')?.value||'').trim();
   const url=`/api/results?mode=${currentResTab}&page=${resPage}&limit=50`
     +(search?`&search=${encodeURIComponent(search)}`:'')
     +(crit  ?`&critical=${crit}`:'')
@@ -1675,33 +2203,52 @@ async function loadResults() {
     const thead=document.getElementById('res-thead');
     const tbody=document.getElementById('res-body');
     const hdrs=['SuperK ID','Comp ID','Source','Mode','Crit','Product','Comp MRP','Comp SP','SK SP','Gap','Status','Run At'];
-    thead.innerHTML='<tr>'+hdrs.map(h=>`<th>${h}</th>`).join('')+'</tr>';
+    thead.innerHTML='<tr>'+hdrs.map(h=>`<th>${h}<div class="col-resize-handle"></div></th>`).join('')+'</tr>';
+
+    updateSearchCount(d.total||0, d.data?.length||0);
+    updateFilterChips();
+
     if(!d.ok||!d.data?.length){
       tbody.innerHTML=`<tr><td colspan="${hdrs.length}"><div class="empty"><div class="empty-icon">📊</div>${d.ok?'No results yet.':esc(d.msg||'Error')}</div></td></tr>`;
       document.getElementById('res-prev').disabled=true;
       document.getElementById('res-next').disabled=true;
       return;
     }
+
     tbody.innerHTML=d.data.map(row=>{
       const isMrp=String(row.mode||'').toUpperCase()==='MRP';
       const diff=isMrp?fmtDelta(row.diff_pct_off,'%'):fmtDelta(row.diff_sp,'₹');
-      const critTag=String(row.is_critical||'0')==='1'?'<span style="color:var(--crit);font-weight:700;font-size:11px;">🔴</span>':'';
-      return `<tr style="${String(row.is_critical||'0')==='1'?'background:var(--crit-bg);':''}">
-        <td><code style="color:var(--blue);font-size:11px;">${esc(row.Superkid||row.superkid||row.id||'—')}</code></td>
-        <td><code style="color:var(--amber);font-size:11px;">${esc(row.Comp_id||row.comp_id||'—')}</code></td>
+      const isCrit=String(row.is_critical||'0')==='1';
+      const critTag=isCrit?'<span style="color:var(--crit);font-weight:700;font-size:11px;">🔴</span>':'';
+      // highlight search term in product name and IDs
+      const sk=row.Superkid||row.superkid||row.id||'—';
+      const ci=row.Comp_id||row.comp_id||'—';
+      const pn=row.product_name||'—';
+      const hlSk=search?hlText(sk,search):esc(sk);
+      const hlCi=search?hlText(ci,search):esc(ci);
+      const hlPn=search?hlText(pn,search):esc(pn);
+      return `<tr style="${isCrit?'background:var(--crit-bg);':''}">
+        <td title="${esc(sk)}"><code style="color:var(--blue);font-size:11px;">${hlSk}</code></td>
+        <td title="${esc(ci)}"><code style="color:var(--amber);font-size:11px;">${hlCi}</code></td>
         <td>${srcPill(row)}</td>
         <td><span class="badge ${isMrp?'bm':'bs'}">${row.mode||'—'}</span></td>
         <td>${critTag}</td>
-        <td class="name">${esc(row.product_name||'—')}</td>
+        <td class="name" title="${esc(pn)}">${hlPn}</td>
         <td>${fmtN(row.comp_mrp)}</td><td>${fmtN(row.comp_sp)}</td><td>${fmtN(row.sk_sp)}</td>
         <td>${diff}</td>
-        <td>${row.status==='OK'?'<span class="badge bm">OK</span>':`<span class="badge bn">${esc((row.status||'').slice(0,18))}</span>`}</td>
+        <td>${row.status==='OK'?'<span class="badge bm">OK</span>':`<span class="badge bn" title="${esc(row.status||'')}">${esc((row.status||'').slice(0,18))}</span>`}</td>
         <td style="font-size:10px;color:var(--muted);">${esc(row.run_at||'')}</td>
       </tr>`;
     }).join('');
-    document.getElementById('res-page-info').textContent=`Page ${resPage+1} · ${d.data.length} rows (${d.total} total)`;
+
+    const pi=document.getElementById('res-page-info');
+    if(pi) pi.textContent=`Page ${resPage+1} · ${d.data.length} rows (${d.total} total)`;
     document.getElementById('res-prev').disabled=resPage===0;
     document.getElementById('res-next').disabled=d.data.length<50;
+
+    // init resizable columns after render
+    initResizableColumns('res-table');
+
   } catch(e){toast('❌ '+e.message,'err');}
 }
 
@@ -1720,9 +2267,16 @@ async function doLookup() {
     let html='';
     if(d.found?.length){
       html+=`<div style="margin-bottom:12px;font-size:12px;color:var(--green);font-family:var(--mono);">✅ Found ${d.found.length} row(s)</div>`;
-      html+=`<div class="tbl-wrap"><table><thead><tr>
-        <th>SuperK ID</th><th>Source</th><th>Comp ID</th><th>PIN</th>
-        <th>MRP Based?</th><th>Critical?</th><th>SK MRP</th><th>SK SP</th><th>URL</th>
+      html+=`<div class="tbl-wrap"><table id="lookup-result-table"><thead><tr>
+        <th>SuperK ID<div class="col-resize-handle"></div></th>
+        <th>Source<div class="col-resize-handle"></div></th>
+        <th>Comp ID<div class="col-resize-handle"></div></th>
+        <th>PIN<div class="col-resize-handle"></div></th>
+        <th>MRP Based?<div class="col-resize-handle"></div></th>
+        <th>Critical?<div class="col-resize-handle"></div></th>
+        <th>SK MRP<div class="col-resize-handle"></div></th>
+        <th>SK SP<div class="col-resize-handle"></div></th>
+        <th>URL<div class="col-resize-handle"></div></th>
       </tr></thead><tbody>`;
       html+=d.found.map(r=>{
         const src=r.source?.toLowerCase();
@@ -1743,6 +2297,8 @@ async function doLookup() {
     }
     if(d.not_found?.length) html+=`<div style="color:var(--red);font-size:12px;font-family:var(--mono);padding:8px 12px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--r4);margin-top:8px;">❌ Not found: <strong>${d.not_found.join(', ')}</strong></div>`;
     el.innerHTML=html;
+    // init resizable after render
+    setTimeout(()=>initResizableColumns('lookup-result-table'),50);
     toast(`Found ${d.total_found}/${(d.found?.length||0)+(d.not_found?.length||0)}`,'ok');
   } catch(e){el.innerHTML=`<div class="banner br">❌ ${esc(e.message)}</div>`;}
 }
@@ -1793,7 +2349,7 @@ async function loadMapperPreview() {
   try {
     const [rMap,rRes]=await Promise.all([
       fetch('/api/mapper/preview'),
-      fetch('/api/results?mode=all&page=0&limit=2000'),
+      fetch('/api/results?mode=all&page=0&limit=5000'),
     ]);
     const [dMap,dRes]=await Promise.all([rMap.json(),rRes.json()]);
     if(!dMap.ok) throw new Error(dMap.msg);
@@ -1841,10 +2397,18 @@ function renderMapperTable(rows) {
       <span class="badge bd">🟠 DMart: ${dmC}</span>
       <span class="badge bo">Showing: ${rows.length}</span>
     </div>
-    <div class="tbl-wrap"><table>
+    <div class="tbl-wrap"><table id="mapper-table">
       <thead><tr>
-        <th>#</th><th>BenchMark</th><th>ID (Superkid)</th><th>Comp ID</th><th>URL</th>
-        <th>Pincode</th><th>Mode</th><th>Last Result</th><th>Gap</th><th>Status</th>
+        <th>#<div class="col-resize-handle"></div></th>
+        <th>BenchMark<div class="col-resize-handle"></div></th>
+        <th>ID (Superkid)<div class="col-resize-handle"></div></th>
+        <th>Comp ID<div class="col-resize-handle"></div></th>
+        <th>URL<div class="col-resize-handle"></div></th>
+        <th>Pincode<div class="col-resize-handle"></div></th>
+        <th>Mode<div class="col-resize-handle"></div></th>
+        <th>Last Result<div class="col-resize-handle"></div></th>
+        <th>Gap<div class="col-resize-handle"></div></th>
+        <th>Status<div class="col-resize-handle"></div></th>
       </tr></thead>
       <tbody>${rows.map((row,i)=>{
         const benchmark=rget(row,'BenchMark','benchmark');
@@ -1876,6 +2440,7 @@ function renderMapperTable(rows) {
         </tr>`;
       }).join('')}</tbody>
     </table></div>`;
+  setTimeout(()=>initResizableColumns('mapper-table'),50);
 }
 
 function filterMapperTable() {
@@ -1951,14 +2516,543 @@ async function saveDmartConfig() {
   const d=await r.json();toast(d.ok?'✅ DMart saved!':'❌ Failed',d.ok?'ok':'err');
 }
 
+
+// ══════════════════════════════════════════════
+//  CHARTS TAB
+// ══════════════════════════════════════════════
+
+async function loadChartsTab() {
+  // Load categories + data in parallel
+  try {
+    const [rm,ra,rc] = await Promise.all([
+      fetch('/api/results?mode=mrp&page=0&limit=5000'),
+      fetch('/api/results?mode=agnostic&page=0&limit=5000'),
+      fetch('/api/categories'),
+    ]);
+    const [dm,da,dc] = await Promise.all([rm.json(),ra.json(),rc.json()]);
+    if(dm.ok&&dm.data) chartsMrpData=dm.data;
+    if(da.ok&&da.data) chartsAgData=da.data;
+    if(dc.ok&&dc.categories) {
+      categoriesList=dc.categories;
+      const sel=document.getElementById('cf-cat');
+      if(sel){
+        const cur=sel.value;
+        sel.innerHTML='<option value="">All Categories</option>'+
+          dc.categories.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+        if(cur) sel.value=cur;
+      }
+      // Also populate trends + results dropdowns
+      populateCategoryDropdowns(dc.categories);
+    }
+    applyChartFilters();
+  } catch(e){ toast('❌ Charts load failed: '+e.message,'err'); }
+}
+
+function populateCategoryDropdowns(cats) {
+  ['tf-cat'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel) return;
+    const cur=sel.value;
+    sel.innerHTML='<option value="">All Categories</option>'+
+      cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    if(cur) sel.value=cur;
+  });
+}
+
+function applyChartFilters() {
+  const cat   = (document.getElementById('cf-cat')?.value||'').trim();
+  const src   = (document.getElementById('cf-src')?.value||'').trim();
+  const mode  = (document.getElementById('cf-mode')?.value||'').toLowerCase();
+  const crit  = document.getElementById('cf-crit')?.value||'';
+  const critOnly = document.getElementById('cf-crit-only')?.checked||false;
+  const sort  = document.getElementById('cf-sort')?.value||'gap_desc';
+  const cap   = parseFloat(document.getElementById('cf-cap')?.value||50);
+
+  function filterRows(rows, diffKey) {
+    let r = rows;
+    if(cat) r = r.filter(x=>(x.procurement_category||'').toLowerCase()===cat.toLowerCase());
+    if(src) r = r.filter(x=>srcOf(x)===src);
+    if(crit==='critical'||critOnly) r = r.filter(x=>String(x.is_critical||'0')==='1');
+    if(crit==='normal') r = r.filter(x=>String(x.is_critical||'0')!=='1');
+    return r;
+  }
+
+  let mrpRows = filterRows(chartsMrpData,'diff_pct_off');
+  let agRows  = filterRows(chartsAgData,'diff_sp');
+
+  // Show/hide sections based on mode filter
+  const mrpSec=document.getElementById('chart-mrp-section');
+  const agSec =document.getElementById('chart-ag-section');
+  if(mode==='agnostic'){if(mrpSec)mrpSec.style.display='none';}
+  else{if(mrpSec)mrpSec.style.display='';}
+  if(mode==='mrp'){if(agSec)agSec.style.display='none';}
+  else{if(agSec)agSec.style.display='';}
+
+  // Build charts with custom sort
+  if(mode!=='agnostic') buildFullChart('chart-mrp-sku','chart-mrp-wrap',mrpRows,'diff_pct_off',sort,cap,'chart-mrp-count','chart-mrp-avg');
+  if(mode!=='mrp')      buildFullChart('chart-ag-sku','chart-ag-wrap',agRows,'diff_sp',sort,9999,'chart-ag-count','chart-ag-avg');
+
+  // Update stats strip
+  const mrpValid=validRows(mrpRows,'diff_pct_off').filter(r=>Math.abs(parseFloat(r.diff_pct_off||0))<=cap);
+  const agValid =validRows(agRows,'diff_sp');
+  const all=[...mrpValid,...agValid];
+  const risk=all.filter(r=>parseFloat(r.diff_pct_off||r.diff_sp||0)>0).length;
+  const edge=all.filter(r=>parseFloat(r.diff_pct_off||r.diff_sp||0)<0).length;
+  const critCnt=all.filter(r=>String(r.is_critical||'0')==='1').length;
+  const diffs=mrpValid.map(r=>parseFloat(r.diff_pct_off||0));
+  const avg=diffs.length?diffs.reduce((a,b)=>a+b,0)/diffs.length:null;
+  document.getElementById('cs-total').textContent=all.length||'—';
+  document.getElementById('cs-risk').textContent=risk||'—';
+  document.getElementById('cs-edge').textContent=edge||'—';
+  document.getElementById('cs-crit').textContent=critCnt||'—';
+  const avgEl=document.getElementById('cs-avg');
+  avgEl.textContent=avg!=null?(avg>=0?'+':'')+avg.toFixed(2)+'%':'—';
+  avgEl.style.color=avg==null?'var(--muted)':avg>0?'var(--red)':'var(--green)';
+}
+
+function buildFullChart(canvasId, wrapId, data, diffKey, sortMode, capVal, countBadgeId, avgPillId) {
+  const wrap=document.getElementById(wrapId);
+  if(!wrap) return;
+  const isMrp=diffKey==='diff_pct_off';
+  let valid=validRows(data,diffKey);
+  if(isMrp) valid=valid.filter(r=>Math.abs(parseFloat(r[diffKey]||0))<=capVal);
+  if(!valid.length){
+    showChartEmpty(wrapId,'No data for current filters. Try adjusting category / source / mode.');
+    if(countBadgeId){const el=document.getElementById(countBadgeId);if(el)el.textContent='';}
+    return;
+  }
+
+  // Sort
+  const sorted=[...valid].sort((a,b)=>{
+    if(sortMode==='gap_asc') return parseFloat(a[diffKey]||0)-parseFloat(b[diffKey]||0);
+    if(sortMode==='name')    return (a.product_name||'').localeCompare(b.product_name||'');
+    if(sortMode==='category')return (a.procurement_category||'').localeCompare(b.procurement_category||'');
+    return parseFloat(b[diffKey]||0)-parseFloat(a[diffKey]||0); // gap_desc
+  });
+
+  if(countBadgeId){const el=document.getElementById(countBadgeId);if(el)el.textContent=sorted.length+' SKUs';}
+  const gaps=sorted.map(r=>parseFloat(r[diffKey]));
+  const avg=gaps.reduce((a,b)=>a+b,0)/gaps.length;
+
+  if(avgPillId){
+    const el=document.getElementById(avgPillId);
+    if(el){
+      el.textContent='Avg '+(avg>=0?'+':'')+avg.toFixed(2)+(isMrp?'%':'₹');
+      el.style.background=avg>0?'var(--red-bg)':'var(--green-bg)';
+      el.style.color=avg>0?'var(--red)':'var(--green)';
+      el.style.borderColor=avg>0?'var(--red-border)':'var(--green-border)';
+    }
+  }
+
+  const labels=sorted.map(r=>{
+    const src=srcOf(r);
+    const icon=src==='dmart'?'🟠':src==='jio'?'🟡':'🟢';
+    const critMark=String(r.is_critical||'0')==='1'?'🔴 ':'';
+    const cat=r.procurement_category?` [${r.procurement_category.slice(0,10)}]`:'';
+    const n=r.product_name||r.name||'';
+    const short=n.length>26?n.slice(0,25)+'…':(n||r.Superkid||r.superkid||'—');
+    return critMark+icon+' '+short+cat;
+  });
+
+  const BAR_H=20;
+  const h=Math.max(300,sorted.length*(BAR_H+10)+100);
+  wrap.style.height=h+'px';
+  wrap.innerHTML='';
+  const canvas=document.createElement('canvas');
+  canvas.id=canvasId;canvas.style.display='block';
+  wrap.appendChild(canvas);
+  if(charts[canvasId]) charts[canvasId].destroy();
+
+  const bg=sorted.map((r,i)=>{
+    const g=gaps[i];const isCrit=String(r.is_critical||'0')==='1';
+    if(g>0.3) return isCrit?'rgba(185,28,28,0.9)':'rgba(192,57,43,0.78)';
+    if(g<-0.3)return isCrit?'rgba(15,90,45,0.9)':'rgba(26,127,75,0.78)';
+    return isCrit?'rgba(130,120,105,0.55)':'rgba(160,155,140,0.38)';
+  });
+  const bd=sorted.map((r,i)=>{
+    const isCrit=String(r.is_critical||'0')==='1';const g=gaps[i];
+    if(isCrit) return 'rgba(185,28,28,0.95)';
+    if(g>0.3) return 'rgba(150,35,25,0.9)';
+    if(g<-0.3)return 'rgba(15,90,45,0.9)';
+    return 'rgba(110,106,98,0.45)';
+  });
+  const bw=sorted.map(r=>String(r.is_critical||'0')==='1'?2:1);
+
+  charts[canvasId]=new Chart(canvas.getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[{data:gaps,backgroundColor:bg,borderColor:bd,borderWidth:bw,
+      borderRadius:{topRight:4,bottomRight:4,topLeft:0,bottomLeft:0},borderSkipped:false,barThickness:BAR_H}]},
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      layout:{padding:{right:60,left:4,top:6,bottom:6}},
+      animation:{duration:320,easing:'easeOutQuart'},
+      plugins:{
+        legend:{display:false},
+        tooltip:{...lightTooltip(),callbacks:{
+          title:items=>{
+            const r=sorted[items[0].dataIndex];
+            const crit=String(r.is_critical||'0')==='1'?'🔴 CRITICAL · ':'';
+            return crit+(r.product_name||r.name||r.Superkid||'');
+          },
+          label:ctx=>{
+            const v=ctx.raw;const r=sorted[ctx.dataIndex];const out=[];
+            if(isMrp){
+              out.push(v>0?'Gap: +'+v.toFixed(2)+'%  ⚠ comp cheaper':v<0?'Gap: '+v.toFixed(2)+'%  ✓ SK cheaper':'Gap: 0%  equal');
+              if(r.comp_pct_off!=null&&r.comp_pct_off!=='') out.push('Comp: '+parseFloat(r.comp_pct_off).toFixed(1)+'% off');
+              if(r.sk_pct_off!=null&&r.sk_pct_off!=='')    out.push('SK:   '+parseFloat(r.sk_pct_off).toFixed(1)+'% off');
+            } else {
+              out.push(v>0?'Diff: +₹'+v.toFixed(2)+' ⚠':v<0?'Diff: -₹'+Math.abs(v).toFixed(2)+' ✓':'Diff: ₹0');
+              if(r.comp_sp!=null&&r.comp_sp!=='') out.push('Comp SP: ₹'+parseFloat(r.comp_sp).toFixed(2));
+              if(r.sk_sp!=null&&r.sk_sp!=='')     out.push('SK SP:   ₹'+parseFloat(r.sk_sp).toFixed(2));
+            }
+            if(r.procurement_category) out.push('Category: '+r.procurement_category);
+            out.push('Source: '+srcOf(r).toUpperCase());
+            return out;
+          }
+        }}
+      },
+      scales:{
+        x:{position:'top',grid:{color:gridColor(),drawBorder:false},border:{display:false},
+          ticks:{font:chartFont(10,'400',true),color:'#9a9790',maxTicksLimit:8,
+            callback:v=>isMrp?(v>0?'+':'')+v.toFixed(0)+'%':(v>=0?'+₹':'-₹')+Math.abs(v).toFixed(0)},
+          title:{display:true,text:'← SK cheaper (edge)          Competitor cheaper (risk) →',
+            color:'#c0bdb2',font:chartFont(10,'400',true),padding:{bottom:6}}},
+        y:{grid:{display:false},border:{display:false},
+          ticks:{font:chartFont(11,'500'),color:'#2e2d28',padding:10}}
+      }
+    }
+  });
+}
+
+function resetChartFilters(){
+  ['cf-cat','cf-src','cf-mode','cf-crit','cf-sort'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const cc=document.getElementById('cf-crit-only');if(cc)cc.checked=false;
+  const cap=document.getElementById('cf-cap');if(cap)cap.value='50';
+  applyChartFilters();
+}
+
+// ══════════════════════════════════════════════
+//  TRENDS TAB
+// ══════════════════════════════════════════════
+
+async function initTrendsTab() {
+  await loadCategoriesForTrends();
+  await loadBackupRuns();
+  await loadTrends();
+}
+
+async function loadCategoriesForTrends() {
+  try {
+    if(categoriesList.length) {
+      populateCategoryDropdowns(categoriesList);
+      return;
+    }
+    const r=await fetch('/api/categories');const d=await r.json();
+    if(d.ok&&d.categories){categoriesList=d.categories;populateCategoryDropdowns(d.categories);}
+  } catch(e){}
+}
+
+async function loadBackupRuns() {
+  try {
+    const r=await fetch('/api/trends/runs');const d=await r.json();
+    if(!d.ok) return;
+    trendsRunsList=d.runs||[];
+    // update backup status card
+    const totalRows=trendsRunsList.reduce((s,r)=>s+(r.count||0),0);
+    const uniqueSkus=trendsRunsList.reduce((s,r)=>s+(r.skus||0),0); // approx
+    document.getElementById('bk-runs').textContent=trendsRunsList.length||'0';
+    document.getElementById('bk-rows').textContent=totalRows.toLocaleString()||'0';
+    document.getElementById('bk-last').textContent=trendsRunsList.length?(trendsRunsList[0].date||'—'):'—';
+    const badge=document.getElementById('backup-status-badge');
+    if(badge){badge.textContent=trendsRunsList.length>0?'Active':'No Data';}
+    // Run log table
+    const tbody=document.getElementById('backup-runs-body');
+    if(tbody){
+      if(!trendsRunsList.length){tbody.innerHTML='<tr><td colspan="4"><div class="empty" style="padding:10px;">No backup runs yet. Runs auto-save after completion.</div></td></tr>';return;}
+      tbody.innerHTML=trendsRunsList.slice(0,50).map(r=>`<tr>
+        <td style="font-size:10px;"><code style="color:var(--teal);">${esc(r.run_id||'—')}</code></td>
+        <td>${esc(r.date||'—')}</td>
+        <td><span class="badge" style="background:var(--teal-bg);color:var(--teal);border:1px solid var(--teal-border);">${r.count||0}</span></td>
+        <td><span class="badge bm">OK</span></td>
+      </tr>`).join('');
+      // run id filter dropdown
+      const sel=document.getElementById('hist-run-sel');
+      if(sel){sel.innerHTML='<option value="">All Runs</option>'+trendsRunsList.slice(0,50).map(r=>`<option value="${esc(r.run_id)}">${esc(r.run_id)} (${r.count})</option>`).join('');}
+    }
+  } catch(e){}
+}
+
+async function loadTrends() {
+  const cat  = document.getElementById('tf-cat')?.value||'';
+  const src  = document.getElementById('tf-src')?.value||'';
+  const mode = document.getElementById('tf-mode')?.value||'';
+  const days = document.getElementById('tf-days')?.value||'90';
+  const skList = [...selectedTrendSkus];
+
+  const params=new URLSearchParams();
+  if(cat) params.append('category',cat);
+  if(src) params.append('source',src);
+  if(mode) params.append('mode',mode);
+  params.append('days',days);
+  skList.forEach(sk=>params.append('sk',sk));
+
+  try {
+    const r=await fetch('/api/trends?'+params.toString());const d=await r.json();
+    if(!d.ok){toast('❌ Trends: '+d.msg,'err');return;}
+    trendsSkuMap=d.skus||{};
+    allSkuList=Object.values(trendsSkuMap).map(s=>({id:s.superkid,name:s.product_name,cat:s.category}));
+    // Update backup card stats
+    document.getElementById('bk-skus').textContent=Object.keys(trendsSkuMap).length||'0';
+    document.getElementById('bk-cats').textContent=(d.categories||[]).length||'0';
+    // Populate category dropdowns with what's in backup
+    if(d.categories?.length) populateCategoryDropdowns(d.categories);
+    // Choose SKUs to display
+    const displaySkus=skList.length?skList:topVolatileSkus(trendsSkuMap,8);
+    buildTrendLines(trendsSkuMap,displaySkus);
+    buildHistDetail(trendsSkuMap,displaySkus);
+  } catch(e){toast('❌ Trends load: '+e.message,'err');}
+}
+
+function topVolatileSkus(skuMap,n){
+  return Object.values(skuMap).map(s=>{
+    const diffs=s.points.filter(p=>p.diff_pct!=null).map(p=>p.diff_pct);
+    if(diffs.length<2) return {id:s.superkid,v:0};
+    const avg=diffs.reduce((a,b)=>a+b,0)/diffs.length;
+    const v=diffs.reduce((a,b)=>a+(b-avg)**2,0)/diffs.length;
+    return{id:s.superkid,v};
+  }).sort((a,b)=>b.v-a.v).slice(0,n).map(x=>x.id);
+}
+
+function buildTrendLines(skuMap,displaySkus){
+  buildLineChart('tline-mrp','tline-mrp-wrap',skuMap,displaySkus,'diff_pct','Discount Gap (%pp)','mrp');
+  buildLineChart('tline-ag','tline-ag-wrap',skuMap,displaySkus,'diff_sp','Price Gap (₹)','ag');
+  buildAbsChart('tline-abs','tline-abs-wrap',skuMap,displaySkus);
+}
+
+function buildLineChart(canvasId,wrapId,skuMap,displaySkus,dataKey,yLabel,modeHint){
+  const wrap=document.getElementById(wrapId);if(!wrap)return;
+  const validSkus=displaySkus.filter(id=>skuMap[id]&&skuMap[id].points.some(p=>p[dataKey]!=null));
+  if(!validSkus.length){
+    wrap.innerHTML=`<div class="trend-empty"><span style="font-size:24px;">📈</span>No ${modeHint.toUpperCase()} data for current selection.<br><span style="font-size:10px;margin-top:4px;">Try adjusting filters or adding SKUs above.</span></div>`;
+    return;
+  }
+  // Build date axis
+  const allDates=[...new Set(validSkus.flatMap(id=>skuMap[id].points.map(p=>p.date.slice(0,16))))].sort();
+  const datasets=validSkus.map((id,i)=>{
+    const s=skuMap[id];const color=TREND_COLORS[i%TREND_COLORS.length];
+    const dateMap={};s.points.forEach(p=>{if(p[dataKey]!=null) dateMap[p.date.slice(0,16)]=p[dataKey];});
+    const isCrit=String(s.is_critical||'0')==='1';
+    return{
+      label:(s.product_name||id).slice(0,28)+(s.product_name?.length>28?'…':''),
+      data:allDates.map(d=>dateMap[d]??null),
+      borderColor:color,backgroundColor:color+'25',
+      tension:0.35,borderWidth:isCrit?3:2,
+      pointRadius:4,pointHoverRadius:7,
+      fill:false,spanGaps:false,
+      borderDash:isCrit?[]:[],
+    };
+  });
+  wrap.style.height=''; wrap.style.minHeight='280px';
+  wrap.innerHTML='';
+  const canvas=document.createElement('canvas');canvas.id=canvasId;wrap.appendChild(canvas);
+  if(charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId]=new Chart(canvas.getContext('2d'),{
+    type:'line',
+    data:{labels:allDates,datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      layout:{padding:{right:12,top:8,bottom:4}},
+      animation:{duration:380},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'bottom',labels:{font:chartFont(11),color:'#5c5a52',boxWidth:14,boxHeight:3,padding:14,usePointStyle:true,pointStyle:'line'}},
+        tooltip:{...lightTooltip(),callbacks:{
+          label:ctx=>{
+            const v=ctx.raw;if(v==null)return null;
+            const sign=v>=0?'+':'';
+            return ' '+ctx.dataset.label+': '+sign+(modeHint==='mrp'?v.toFixed(2)+'%':'₹'+v.toFixed(2));
+          }
+        }}
+      },
+      scales:{
+        x:{grid:{color:gridColor()},border:{display:false},ticks:{font:chartFont(10,'400',true),color:'#9a9790',maxRotation:35,maxTicksLimit:10}},
+        y:{grid:{color:gridColor()},border:{display:false},
+          ticks:{font:chartFont(10,'400',true),color:'#9a9790',callback:v=>modeHint==='mrp'?(v>=0?'+':'')+v.toFixed(1)+'%':'₹'+v.toFixed(0)},
+          title:{display:true,text:yLabel,color:'#b0ad9e',font:chartFont(10,'400',true)}}
+      }
+    }
+  });
+}
+
+function buildAbsChart(canvasId,wrapId,skuMap,displaySkus){
+  const wrap=document.getElementById(wrapId);if(!wrap)return;
+  const validSkus=displaySkus.filter(id=>skuMap[id]&&skuMap[id].points.some(p=>p.comp_sp!=null||p.sk_sp!=null)).slice(0,5);
+  if(!validSkus.length){
+    wrap.innerHTML=`<div class="trend-empty"><span style="font-size:24px;">💰</span>Select SKUs above to compare absolute prices.</div>`;
+    return;
+  }
+  const allDates=[...new Set(validSkus.flatMap(id=>skuMap[id].points.map(p=>p.date.slice(0,16))))].sort();
+  const datasets=validSkus.flatMap((id,i)=>{
+    const s=skuMap[id];const color=TREND_COLORS[i%TREND_COLORS.length];
+    const compMap={},skMap={};
+    s.points.forEach(p=>{if(p.comp_sp!=null)compMap[p.date.slice(0,16)]=p.comp_sp;if(p.sk_sp!=null)skMap[p.date.slice(0,16)]=p.sk_sp;});
+    const shortName=(s.product_name||id).slice(0,18);
+    return[
+      {label:shortName+' (Comp)',data:allDates.map(d=>compMap[d]??null),borderColor:color,backgroundColor:color+'15',tension:0.3,borderWidth:2.5,pointRadius:3,fill:false,spanGaps:false},
+      {label:shortName+' (SK)',  data:allDates.map(d=>skMap[d]??null),  borderColor:color,backgroundColor:color+'15',tension:0.3,borderWidth:2.5,borderDash:[6,4],pointRadius:3,fill:false,spanGaps:false},
+    ];
+  });
+  wrap.style.height='';wrap.style.minHeight='280px';wrap.innerHTML='';
+  const canvas=document.createElement('canvas');canvas.id=canvasId;wrap.appendChild(canvas);
+  if(charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId]=new Chart(canvas.getContext('2d'),{
+    type:'line',data:{labels:allDates,datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,layout:{padding:{right:12}},animation:{duration:350},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'bottom',labels:{font:chartFont(10),color:'#5c5a52',boxWidth:18,padding:10,usePointStyle:true,pointStyle:'line'}},
+        tooltip:{...lightTooltip(),callbacks:{label:ctx=>{const v=ctx.raw;return v==null?null:' '+ctx.dataset.label+': ₹'+v.toFixed(2);}}}
+      },
+      scales:{
+        x:{grid:{color:gridColor()},border:{display:false},ticks:{font:chartFont(10,'400',true),color:'#9a9790',maxRotation:35,maxTicksLimit:10}},
+        y:{grid:{color:gridColor()},border:{display:false},ticks:{font:chartFont(10,'400',true),color:'#9a9790',callback:v=>'₹'+v},title:{display:true,text:'Price (₹)',color:'#b0ad9e',font:chartFont(10,'400',true)}}
+      }
+    }
+  });
+}
+
+// SKU typeahead
+function skuTypeahead(){
+  clearTimeout(histSkuTimer);
+  histSkuTimer=setTimeout(()=>{
+    const q=(document.getElementById('sku-search-inp')?.value||'').toLowerCase().trim();
+    const dd=document.getElementById('sku-dd');
+    if(!dd) return;
+    if(!q){dd.classList.remove('open');return;}
+    const matches=allSkuList.filter(s=>(s.id||'').toLowerCase().includes(q)||(s.name||'').toLowerCase().includes(q)).slice(0,12);
+    if(!matches.length){dd.classList.remove('open');return;}
+    dd.innerHTML=matches.map(s=>`<div class="sku-dd-item" onclick="addTrendSku('${esc(s.id)}','${esc(s.name||'')}')">
+      <code style="color:var(--teal);font-size:11px;">${esc(s.id)}</code>
+      <span style="color:var(--muted);font-size:11px;">${esc((s.name||'').slice(0,35))}</span>
+      ${s.cat?`<span class="badge" style="background:var(--teal-bg);color:var(--teal);border:1px solid var(--teal-border);font-size:9px;">${esc(s.cat)}</span>`:''}
+    </div>`).join('');
+    dd.classList.add('open');
+  },260);
+}
+
+function addTrendSku(id,name){
+  selectedTrendSkus.add(id);
+  renderSkuChips();
+  const dd=document.getElementById('sku-dd');if(dd)dd.classList.remove('open');
+  const inp=document.getElementById('sku-search-inp');if(inp)inp.value='';
+  loadTrends();
+}
+
+function removeTrendSku(id){
+  selectedTrendSkus.delete(id);
+  renderSkuChips();
+  loadTrends();
+}
+
+function renderSkuChips(){
+  const el=document.getElementById('sku-chips');if(!el)return;
+  el.innerHTML=[...selectedTrendSkus].map(id=>{
+    const entry=allSkuList.find(s=>s.id===id);
+    const name=entry?entry.name:'';
+    return `<span class="sku-chip">
+      <code style="font-size:10px;">${esc(id)}</code>
+      ${name?`<span style="opacity:.7;">${esc(name.slice(0,18))}</span>`:''}
+      <button class="sku-chip-rm" onclick="removeTrendSku('${esc(id)}')" title="Remove">×</button>
+    </span>`;
+  }).join('');
+}
+
+function buildHistDetail(skuMap,displaySkus){
+  histAllRows=[];
+  const skuArr=Object.values(skuMap);
+  skuArr.forEach(s=>{
+    s.points.forEach(p=>{
+      histAllRows.push({
+        run_id:p.run_id,date:p.date,superkid:s.superkid,product_name:s.product_name,
+        category:s.category,source:s.source,mode:s.mode,is_critical:s.is_critical,
+        comp_sp:p.comp_sp,sk_sp:p.sk_sp,diff_pct:p.diff_pct,diff_sp:p.diff_sp,status:p.status,
+      });
+    });
+  });
+  histAllRows.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  histPage=0;
+  const sub=document.getElementById('hist-detail-sub');
+  if(sub) sub.textContent=histAllRows.length+' rows · '+Object.keys(skuMap).length+' SKUs';
+  renderHistTable();
+}
+
+function renderHistTable(){
+  const q=(document.getElementById('hist-search')?.value||'').toLowerCase();
+  const runF=document.getElementById('hist-run-sel')?.value||'';
+  let rows=histAllRows;
+  if(q)    rows=rows.filter(r=>Object.values(r).some(v=>String(v||'').toLowerCase().includes(q)));
+  if(runF) rows=rows.filter(r=>r.run_id===runF);
+  const PAGE=50,total=rows.length;
+  const slice=rows.slice(histPage*PAGE,(histPage+1)*PAGE);
+  const tbody=document.getElementById('hist-detail-body');
+  if(!tbody)return;
+  if(!slice.length){
+    tbody.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-icon">📈</div>No data matches filter.</div></td></tr>';
+  } else {
+    tbody.innerHTML=slice.map(r=>{
+      const isMrp=String(r.mode||'').toUpperCase()==='MRP';
+      const diff=isMrp?fmtDelta(r.diff_pct,'%'):fmtDelta(r.diff_sp,'₹');
+      const isCrit=String(r.is_critical||'0')==='1';
+      return `<tr style="${isCrit?'background:var(--crit-bg);':''}">
+        <td style="font-size:10px;color:var(--muted);">${esc(r.run_id||'—')}</td>
+        <td style="font-size:10px;">${esc((r.date||'—').slice(0,16))}</td>
+        <td><code style="color:var(--blue);font-size:10px;">${esc(r.superkid||'—')}</code></td>
+        <td class="name">${esc(r.product_name||'—')}</td>
+        <td><span class="badge" style="background:var(--teal-bg);color:var(--teal);border:1px solid var(--teal-border);font-size:9px;">${esc(r.category||'—')}</span></td>
+        <td>${srcPill(r)}</td>
+        <td><span class="badge ${isMrp?'bm':'bs'}">${esc(r.mode||'—')}</span></td>
+        <td>${fmtN(r.comp_sp)}</td><td>${fmtN(r.sk_sp)}</td>
+        <td>${diff}</td>
+        <td>${r.status==='OK'?'<span class="badge bm">OK</span>':`<span class="badge bn">${esc((r.status||'').slice(0,14))}</span>`}</td>
+      </tr>`;
+    }).join('');
+  }
+  const pi=document.getElementById('hist-page-info');
+  if(pi) pi.textContent=`Page ${histPage+1} · ${slice.length} / ${total}`;
+  document.getElementById('hist-prev-btn').disabled=histPage===0;
+  document.getElementById('hist-next-btn').disabled=slice.length<PAGE;
+  initResizableColumns('hist-detail-table');
+}
+function filterHistTable(){histPage=0;renderHistTable();}
+
+// ══════════════════════════════════════════════
+//  BACKUP
+// ══════════════════════════════════════════════
+
+async function manualBackup(){
+  toast('💾 Backing up…');
+  try{
+    const r=await fetch('/api/backup/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json();
+    if(d.ok){toast(`✅ ${d.rows_written} rows backed up to Backup sheet`,'ok');loadBackupRuns();}
+    else toast('❌ Backup failed: '+d.msg,'err');
+  }catch(e){toast('❌ '+e.message,'err');}
+}
+
 // ══════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════
 loadStats();
 loadMapperPreview();
-setInterval(loadStats,30000);
-setInterval(pollStatus,2000);
+setInterval(loadStats, 30000);
+setInterval(pollStatus, 2000);
 switchResTab('all');
+// Close SKU typeahead on outside click
+document.addEventListener('click',e=>{
+  const dd=document.getElementById('sku-dd');
+  if(dd&&!dd.contains(e.target)&&e.target.id!=='sku-search-inp') dd.classList.remove('open');
+});
 </script>
 </body>
 </html>
