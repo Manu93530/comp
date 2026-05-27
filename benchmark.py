@@ -7,7 +7,7 @@ Key change in v5: SheetCache
     from in-memory cache — response time drops from 8-20s → <100ms
   • Background thread warms cache on server start so first user gets
     instant response
-  • Cache invalidated automatically after a scraper run completes
+  • Cache invalidated only after a scraper run completes (no time-based expiry)
   • Thread-safe: RLock guards reads/writes
 
 Everything else identical to v4.1 (scrapers, OAuth, backup, Slack, etc.)
@@ -126,7 +126,7 @@ config_store = {
     "delay_sec":          float(os.getenv("DELAY_SEC", 0.5)),
     "slack_webhook":      os.getenv("SLACK_WEBHOOK", ""),
     "slack_channel":      os.getenv("SLACK_CHANNEL", "#comp-pricing-alerts"),
-    "cache_ttl_sec":      int(os.getenv("CACHE_TTL_SEC", 300)),   # 5 minutes
+    "cache_ttl_sec":      int(os.getenv("CACHE_TTL_SEC", 999999)), # no auto-expire; refresh browser manually
     "jio_pincode":        os.getenv("JIO_PINCODE", "516001"),
     "jio_city":           os.getenv("JIO_CITY", "KADAPA"),
     "jio_state":          os.getenv("JIO_STATE", "ANDHRA_PRADESH"),
@@ -204,7 +204,7 @@ config_store = {
 #
 #  First request:  reads Google Sheets (~8-20s, unavoidable)
 #  All subsequent: served from RAM (<5ms)
-#  TTL:            5 minutes (configurable via CACHE_TTL_SEC env var)
+#  TTL:            none — data stays cached until run completes or /api/cache/clear
 #  Invalidation:   automatic after scraper run, or via /api/cache/clear
 #  Thread-safe:    RLock prevents concurrent double-reads
 # ══════════════════════════════════════════════════════════════
@@ -219,7 +219,7 @@ class SheetCache:
         self._categories    = None   # list[str]  — sorted unique cats
         self._loaded_at     = 0.0
         self._loading       = False
-        self._ttl           = 300    # seconds — updated from config
+        self._ttl           = 999999  # no auto-expire; refreshed only on run complete or manual /api/cache/clear
 
     def _is_stale(self):
         return (time.time() - self._loaded_at) > self._ttl
@@ -334,7 +334,7 @@ class SheetCache:
             self._price_master = default_map
             self._categories   = sorted(cats)
             self._loaded_at    = time.time()
-            self._ttl          = int(cfg.get("cache_ttl_sec", 300))
+            self._ttl          = int(cfg.get("cache_ttl_sec", 999999))
 
         rlog(f"SheetCache: fully loaded in {time.time()-t0:.1f}s — "
              f"{len(cleaned_mapper)} mapper | {len(default_map)} PM | "
@@ -1543,7 +1543,7 @@ def get_config():
 @app.route("/api/config", methods=["POST"])
 def save_config():
     config_store.update(request.json or {})
-    _cache._ttl = int(config_store.get("cache_ttl_sec", 300))
+    _cache._ttl = int(config_store.get("cache_ttl_sec", 999999))
     rlog("Configuration saved.", "OK")
     return jsonify({"ok":True})
 
@@ -1756,7 +1756,7 @@ if __name__ == "__main__":
     print("PriceLens v5 (Server Cache Edition) → http://localhost:5050")
     print(f"  Master Mapper ID   : {MASTER_MAPPER_ID}")
     print(f"  Master Mapper Sheet: {MASTER_MAPPER_SHEET}")
-    print("  Cache TTL          : 5 minutes (set CACHE_TTL_SEC to change)")
+    print("  Cache TTL          : manual only (refresh browser to reload data)")
     print("  Sources: JioMart 🟡 · BigBasket 🟢 · DMart Ready 🟠")
     print("=" * 60)
 
