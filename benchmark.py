@@ -2098,4 +2098,4 @@ if __name__ == "__main__":
     print("  JioMart: curl_cffi chrome110 impersonation + cookies")
     print("  Features: Pause/Stop · Selective · Source Filter · Lookup")
     print("=" * 60)
-    app.run(host='10.20.8.177',debug=False, port=5050, threaded=True)
+    app.run(host='0.0.0.0', debug=False, port=5050, threaded=True)
