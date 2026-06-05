@@ -7,3 +7,4 @@ google-api-python-client>=2.125.0
 openpyxl>=3.1.2
 python-dotenv>=1.0.0
 gunicorn
+bs4>=0.0.2
