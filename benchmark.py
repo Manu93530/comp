@@ -1,17 +1,3 @@
-"""
-PriceLens — Google Sheets Edition  (v5 — Server Cache Edition)
-═══════════════════════════════════════════════════════════════
-Key change in v5: SheetCache
-  • Master Mapper + Price Master read ONCE per 5 minutes (configurable)
-  • All API endpoints (results, stats, categories, mapper/preview) read
-    from in-memory cache — response time drops from 8-20s → <100ms
-  • Background thread warms cache on server start so first user gets
-    instant response
-  • Cache invalidated only after a scraper run completes (no time-based expiry)
-  • Thread-safe: RLock guards reads/writes
-
-Everything else identical to v4.1 (scrapers, OAuth, backup, Slack, etc.)
-"""
 from dotenv import load_dotenv
 load_dotenv()
 import os, threading, traceback, time, re, json, io, math
@@ -309,7 +295,7 @@ class SheetCache:
                                      or norm.get("iscritical","")) else 0
             default_map[sid.lower().strip()] = {
                 "mrp":                  norm.get("mrp",""),
-                "sp":                   norm.get("selling_price","") or norm.get("sp",""),
+                "sp":                   norm.get("promotional_price","") or norm.get("promotional_price",""),
                 "mrp_based":            mrp_based,
                 "is_critical":          is_crit,
                 "_raw_sid":             sid,
@@ -649,7 +635,27 @@ def fetch_jiomart_price(comp_id: str, cfg: dict, pincode: str = None) -> dict:
 # ══════════════════════════════════════════════════════════════
 
 def parse_bb_price_from_html(html):
-    result = {"mrp": None, "selling_price": None, "title": "", "discount_pct": None}
+    result = {"mrp": None, "selling_price": None, "title": "", "discount_pct": None, "status": "OK"}
+
+    # ── OOS / Notify Me detection (check before anything else) ──
+    oos_markers = [
+        r'<span[^>]*>\s*Out of Stock\s*</span>',
+        r'class="[^"]*text-darkOnyx-400[^"]*"[^>]*>.*?Out of Stock',
+        r'w-40[^"]*py-1\.5[^"]*ml-20[^"]*text-center[^"]*text-darkOnyx',
+    ]
+    notify_markers = [
+        r'<button[^>]*>\s*Notify Me\s*</button>',
+        r'Notify\s*Me',
+    ]
+    is_oos    = any(re.search(p, html, re.S | re.I) for p in oos_markers)
+    is_notify = any(re.search(p, html, re.S | re.I) for p in notify_markers)
+
+    if is_oos:
+        result["status"] = "Out of Stock"
+    elif is_notify:
+        result["status"] = "Notify Me"
+
+    # ── Strategy 1: __NEXT_DATA__ JSON ───────────────────────
     try:
         m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.S)
         if m:
@@ -659,19 +665,44 @@ def parse_bb_price_from_html(html):
             disc = (prod.get("pricing",{}) or {}).get("discount",{}) or {}
             h1   = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.S)
             result["title"] = _clean(h1.group(1)) if h1 else ""
-            result["mrp"]   = _clean(disc.get("mrp","")) or None
-            sp = ((disc.get("prim_price",{}) or {}).get("sp") or
-                  (disc.get("sec_price", {}) or {}).get("sp") or "")
-            result["selling_price"] = _clean(sp) or None
-            result["discount_pct"]  = disc.get("discount_pct") or disc.get("discount") or None
-    except Exception: pass
+
+            raw_mrp = _clean(disc.get("mrp","")) or None
+            sp_val  = ((disc.get("prim_price",{}) or {}).get("sp") or
+                       (disc.get("sec_price", {}) or {}).get("sp") or "")
+            raw_sp  = _clean(str(sp_val)) if sp_val else None
+
+            # Only assign if values actually exist — never write blank/zero
+            if raw_mrp and raw_mrp not in ("0", "0.0", ""):
+                result["mrp"] = raw_mrp
+            if raw_sp and raw_sp not in ("0", "0.0", ""):
+                result["selling_price"] = raw_sp
+
+            result["discount_pct"] = disc.get("discount_pct") or disc.get("discount") or None
+    except Exception:
+        pass
+
+    # ── Strategy 2: regex fallback (only fill still-missing fields) ──
     if not result["mrp"] or not result["selling_price"]:
         m1 = re.search(r'\bMRP\b\D{0,40}₹?\s*([\d,]+(?:\.\d+)?)', html, re.I)
         m2 = re.search(r'\b(?:Price|Selling\s*Price|Offer\s*Price)\b\D{0,40}₹?\s*([\d,]+(?:\.\d+)?)', html, re.I)
-        if m1 and not result["mrp"]:           result["mrp"]           = m1.group(1)
-        if m2 and not result["selling_price"]: result["selling_price"] = m2.group(1)
-    return result
+        if m1 and not result["mrp"]:
+            v = m1.group(1).replace(",","")
+            if v and v not in ("0","0.0"):
+                result["mrp"] = v
+        if m2 and not result["selling_price"]:
+            v = m2.group(1).replace(",","")
+            if v and v not in ("0","0.0"):
+                result["selling_price"] = v
+    if result["status"] in ("Out of Stock", "Notify Me"):
+        result["mrp"] = None
+        result["selling_price"] = None
+        result["discount_pct"] = None
+    # ── If price genuinely missing for an in-stock page, flag it ──
+    if not result["mrp"] and not result["selling_price"]:
+        if result["status"] == "OK":
+            result["status"] = "Price Not Found"
 
+    return result
 
 def fetch_bb_price(url, cfg):
     try:
@@ -914,8 +945,6 @@ def real_run(cfg, filter_superkids=None, source_filter="all"):
         service = get_sheets_service(cfg["credentials_path"])
         rlog("Auth OK.", "OK")
 
-        # Use cache for mapper rows (fast); then ensure result columns
-        # by reading headers from cache and writing missing cols to Sheet
         _cache.ensure(service, cfg)
         mapper_rows = _cache.get_mapper_rows()
         rlog(f"Mapper: {len(mapper_rows)} rows (from cache).", "OK")
@@ -962,82 +991,138 @@ def real_run(cfg, filter_superkids=None, source_filter="all"):
                 rlog(f"⛔ STOPPED after {idx-1} items.", "WARN")
                 active_run["stopped"] = True; break
 
-            superkid = row["superkid"]; comp_id = row["comp_id"]
-            url = row["url"]; pincode = row["pincode"] or cfg.get("jio_pincode","516001")
-            row_idx = row["_row_idx"]
-            source  = detect_benchmark(row["benchmark"], url)
+            superkid = row["superkid"]
+            comp_id  = row["comp_id"].strip()          # strip immediately
+            url      = row["url"].strip()              # strip immediately
+            pincode  = (row["pincode"] or "").strip() or cfg.get("jio_pincode", "516001")
+            row_idx  = row["_row_idx"]                 # exact Sheet row, never reassigned
+            source   = detect_benchmark(row["benchmark"], url)  # called after strip
+
             active_run["progress"] = idx
             active_run["current"]  = f"[{idx}/{total}] {source.upper()} | {superkid}"
 
-            src_icon = {"jio":"🟡","bb":"🟢","dmart":"🟠"}.get(source,"⚪")
-            rlog(f"[{idx}/{total}] {src_icon} {source.upper()} superkid={superkid} comp_id={comp_id}", "INFO")
+            src_icon = {"jio": "🟡", "bb": "🟢", "dmart": "🟠"}.get(source, "⚪")
+            rlog(f"[{idx}/{total}] {src_icon} {source.upper()} "
+                 f"superkid={superkid} comp_id={comp_id!r} url={url[:60]!r}", "INFO")
+
+            # ══ SKIP GUARDS — Sheet row is never touched for these ═══════
+            if source == "jio" and not comp_id:
+                rlog(f"  ⏭ SKIP row {row_idx}: JioMart comp_id blank — row left untouched", "WARN")
+                time.sleep(float(cfg.get("delay_sec", 0.5)))
+                continue
+
+            if source in ("bb", "dmart") and not url:
+                rlog(f"  ⏭ SKIP row {row_idx}: {source.upper()} url blank — row left untouched", "WARN")
+                time.sleep(float(cfg.get("delay_sec", 0.5)))
+                continue
+
+            if not superkid:
+                rlog(f"  ⏭ SKIP row {row_idx}: superkid blank — row left untouched", "WARN")
+                time.sleep(float(cfg.get("delay_sec", 0.5)))
+                continue
+            # ═════════════════════════════════════════════════════════════
 
             sk_lookup_key = superkid.lower().strip()
-            sk_entry = default_map.get(sk_lookup_key)
+            sk_entry      = default_map.get(sk_lookup_key)
             if sk_entry:
                 mrp_based   = sk_entry["mrp_based"]
                 is_critical = sk_entry["is_critical"]
-                mode_label  = "MRP" if mrp_based is True else "Agnostic" if mrp_based is False else "—"
+                mode_label  = ("MRP" if mrp_based is True else
+                               "Agnostic" if mrp_based is False else "—")
                 rlog(f"  ✅ PM: mode={mode_label} sk_mrp={sk_entry['mrp']} sk_sp={sk_entry['sp']}", "INFO")
             else:
-                mrp_based = None; is_critical = 0
+                mrp_based   = None
+                is_critical = 0
                 rlog(f"  ❌ '{superkid}' not found in Price Master", "WARN")
 
-            crit_tag = " 🔴CRIT" if is_critical else ""
+            crit_tag  = " 🔴CRIT" if is_critical else ""
             comp_info = {}
+
+            # ══ FETCH — each branch uses ONLY this row's identifier ══════
             try:
                 if source == "jio":
+                    # comp_id guaranteed non-blank by guard above
                     info = fetch_jiomart_price(comp_id, cfg, pincode)
-                    comp_info = {"product_name": info["product_name"],
-                                 "mrp": info["mrp"], "selling_price": info["selling_price"],
-                                 "status": "OK"}
+                    comp_info = {
+                        "product_name": info["product_name"],
+                        "mrp":          info["mrp"],
+                        "selling_price":info["selling_price"],
+                        "status":       "OK",
+                    }
+
                 elif source == "bb":
-                    if not url: raise RuntimeError("BB requires url in Master Mapper")
+                    # url guaranteed non-blank by guard above
                     info = fetch_bb_price(url, cfg)
-                    if "error" in info: raise RuntimeError(info["error"])
-                    comp_info = {"product_name": info.get("title",""),
-                                 "mrp": str(info.get("mrp") or ""),
-                                 "selling_price": str(info.get("selling_price") or ""),
-                                 "status": "OK"}
+                    if "error" in info:
+                        raise RuntimeError(info["error"])
+                    bb_status      = info.get("status", "OK")
+                    is_unavailable = bb_status in ("Out of Stock", "Notify Me", "Price Not Found")
+                    comp_info = {
+                        "product_name": info.get("title", ""),
+                        "mrp":          "" if is_unavailable else str(info.get("mrp") or ""),
+                        "selling_price":"" if is_unavailable else str(info.get("selling_price") or ""),
+                        "status":       bb_status,
+                    }
+
                 elif source == "dmart":
-                    if not url: raise RuntimeError("DMart requires url in Master Mapper")
+                    # url guaranteed non-blank by guard above
                     info = fetch_dmart_price(url, cfg)
-                    if "error" in info: raise RuntimeError(info["error"])
-                    comp_info = {"product_name": info.get("title",""),
-                                 "mrp": str(info.get("mrp") or ""),
-                                 "selling_price": str(info.get("selling_price") or ""),
-                                 "status": "OK"}
+                    if "error" in info:
+                        raise RuntimeError(info["error"])
+                    comp_info = {
+                        "product_name": info.get("title", ""),
+                        "mrp":          str(info.get("mrp") or ""),
+                        "selling_price":str(info.get("selling_price") or ""),
+                        "status":       "OK",
+                    }
                     if not comp_info["mrp"] or not comp_info["selling_price"]:
-                        comp_info["status"] = "ERROR: Price not found in page"; errors += 1
+                        comp_info["status"] = "ERROR: Price not found in page"
+                        errors += 1
+
                 else:
                     raise RuntimeError(f"Unknown source '{source}'")
-            except Exception as e:
-                comp_info = {"product_name":"","mrp":"","selling_price":"",
-                             "status": f"ERROR: {str(e)[:80]}"}
-                errors += 1; rlog(f"  ✗ Fetch error: {e}", "ERROR")
 
-            result, log_delta = compute_result(comp_info, sk_entry, run_id,
-                                               superkid, mrp_based, is_critical)
+            except Exception as e:
+                comp_info = {
+                    "product_name": "",
+                    "mrp":          "",
+                    "selling_price":"",
+                    "status":       f"ERROR: {str(e)[:80]}",
+                }
+                errors += 1
+                rlog(f"  ✗ Fetch error: {e}", "ERROR")
+
+            # ══ COMPUTE ═══════════════════════════════════════════════════
+            result, log_delta = compute_result(
+                comp_info, sk_entry, run_id, superkid, mrp_based, is_critical
+            )
             results_map_for_backup[sk_lookup_key] = result
 
             if log_delta:
-                lvl = ("WARN" if "RED" in log_delta else
-                       "ERROR" if ("not found" in log_delta or "incalculable" in log_delta) else "OK")
+                lvl = ("WARN"  if "RED"          in log_delta else
+                       "ERROR" if ("not found"    in log_delta or
+                                   "incalculable" in log_delta) else "OK")
                 rlog(f"  {log_delta}{crit_tag}", lvl)
 
+            # ══ WRITE — pinned to this row's exact row_idx ════════════════
             try:
+                rlog(f"  ✍ Writing → Sheet row {row_idx} "
+                     f"(superkid={superkid}, source={source.upper()})", "INFO")
                 write_result_to_mapper_row(service, row_idx, col_map, result)
+
                 if mapper_sheet_id is not None:
-                    diff_key = ("diff_pct_off" if mrp_based is True else
-                                "diff_sp" if mrp_based is False else None)
-                    diff_val = result.get(diff_key,"") if diff_key else ""
+                    diff_key = ("diff_pct_off" if mrp_based is True  else
+                                "diff_sp"      if mrp_based is False else None)
+                    diff_val = result.get(diff_key, "") if diff_key else ""
                     if diff_val not in ("", None):
                         col_0b = col_map.get(diff_key, -1)
                         if col_0b >= 0:
-                            style_diff_cell(service, mapper_sheet_id, row_idx, col_0b, diff_val)
+                            style_diff_cell(service, mapper_sheet_id,
+                                            row_idx, col_0b, diff_val)
                 written += 1
             except Exception as we:
-                rlog(f"  ✗ Sheet write error: {we}", "ERROR"); errors += 1
+                rlog(f"  ✗ Sheet write error for row {row_idx}: {we}", "ERROR")
+                errors += 1
 
             time.sleep(float(cfg.get("delay_sec", 0.5)))
 
@@ -1050,7 +1135,6 @@ def real_run(cfg, filter_superkids=None, source_filter="all"):
     ts       = datetime.now().strftime("%d %b %Y, %H:%M:%S")
     stopped  = _stop_event.is_set()
 
-    # Invalidate cache so next page load reflects new results
     _cache.invalidate()
 
     rlog("=" * 60)
@@ -1072,7 +1156,6 @@ def real_run(cfg, filter_superkids=None, source_filter="all"):
     try: _send_slack(cfg, summary)
     except Exception: pass
     rlog("=" * 60)
-
 
 # ══════════════════════════════════════════════════════════════
 #  SLACK
@@ -1167,7 +1250,373 @@ def build_excel(headers, data_rows, diff_key, sheet_title="Results"):
 # ══════════════════════════════════════════════════════════════
 #  BACKUP SHEET HELPERS
 # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+#  AMAZON FRESH FETCHER  — drop this block into app.py
+#  between the DMart fetcher and the "COMPUTE RESULT ROW" section
+#
+#  Requires:
+#    pip install playwright beautifulsoup4
+#    playwright install chromium
+#
+#  How it works:
+#   1. Playwright spins a real Chromium browser (headless) to set
+#      the delivery pincode and harvest session cookies.
+#   2. curl_cffi replays the product-page request with those
+#      cookies so the price is location-aware and bot-resilient.
+#   3. Cookies are cached in _amz_cookie_cache for `COOKIE_TTL`
+#      seconds so we only run Playwright once per session.
+#
+#  Master Mapper column setup:
+#    BenchMark  →  amazon  (or amazon_fresh)
+#    Comp_id    →  ASIN   e.g. B00K0LUSSS
+#    url        →  full product URL  (optional — built from ASIN if blank)
+#    pincode    →  per-row override  (falls back to config default)
+# ══════════════════════════════════════════════════════════════
 
+import asyncio, threading
+from bs4 import BeautifulSoup
+
+# ── optional Playwright guard ─────────────────────────────────
+try:
+    from playwright.async_api import async_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+
+# ── per-pincode cookie cache ──────────────────────────────────
+_amz_cookie_cache: dict = {}          # {pincode: {"dict":…, "header":…, "ts":…}}
+_amz_cookie_lock = threading.Lock()
+COOKIE_TTL = 3600                     # seconds before re-running Playwright
+
+AMZ_BASE_HEADERS = {
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "accept-language": "en-IN,en;q=0.9",
+    "cache-control": "no-cache",
+    "pragma": "no-cache",
+    "dpr": "1",
+    "ect": "4g",
+    "rtt": "100",
+    "sec-ch-dpr": "1",
+    "sec-ch-ua": '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "upgrade-insecure-requests": "1",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "viewport-width": "1366",
+}
+
+
+# ── Playwright cookie harvester ───────────────────────────────
+
+async def _playwright_get_cookies(pincode: str, product_url: str) -> tuple[dict, str]:
+    """
+    Opens a real Chromium session, sets the delivery pincode,
+    navigates to the product URL, then returns the full cookie jar.
+    """
+    rlog(f"  AMZ Playwright: launching browser for pincode={pincode}", "INFO")
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+        )
+        ctx = await browser.new_context(
+            user_agent=AMZ_BASE_HEADERS["user-agent"],
+            viewport={"width": 1366, "height": 768},
+            locale="en-IN",
+            timezone_id="Asia/Kolkata",
+            extra_http_headers={"accept-language": "en-IN,en;q=0.9", "dpr": "1", "viewport-width": "1366"},
+        )
+        await ctx.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins',   { get: () => [1, 2, 3] });
+            window.chrome = { runtime: {} };
+        """)
+        page = await ctx.new_page()
+
+        # ── 1. Homepage visit ─────────────────────────────────────
+        await page.goto("https://www.amazon.in/", wait_until="domcontentloaded")
+        await page.wait_for_timeout(2500)
+
+        # ── 2. Open delivery pincode dialog ──────────────────────
+        try:
+            await page.click("#nav-global-location-popover-link", timeout=8000)
+            await page.wait_for_timeout(1800)
+        except Exception as e:
+            rlog(f"  AMZ: location link click failed: {e}", "WARN")
+
+        # ── 3. Type pincode ───────────────────────────────────────
+        pin_set = False
+        try:
+            await page.wait_for_selector(
+                "input[data-localization-key='location_input_label']", timeout=6000)
+            await page.fill(
+                "input[data-localization-key='location_input_label']", pincode)
+            await page.wait_for_timeout(900)
+            await page.click(
+                "input[aria-labelledby='GLUXZipUpdate-announce']", timeout=5000)
+            await page.wait_for_timeout(2500)
+            pin_set = True
+            rlog(f"  AMZ: pincode {pincode} set via primary dialog", "OK")
+        except Exception:
+            try:
+                await page.fill("#GLUXZipUpdateInput", pincode)
+                await page.click("#GLUXZipUpdate input[type='submit']")
+                await page.wait_for_timeout(2500)
+                pin_set = True
+                rlog(f"  AMZ: pincode {pincode} set via fallback", "OK")
+            except Exception as e2:
+                rlog(f"  AMZ: pincode dialog failed: {e2}", "WARN")
+
+        # ── 4. Confirm dialog if shown ────────────────────────────
+        try:
+            btn = page.locator("button.a-button-text:has-text('Continue')")
+            if await btn.count() > 0:
+                await btn.click()
+                await page.wait_for_timeout(1500)
+        except Exception:
+            pass
+
+        if pin_set:
+            try:
+                loc = await page.inner_text("#glow-ingress-line2", timeout=3000)
+                rlog(f"  AMZ: delivery location confirmed → {loc.strip()}", "OK")
+            except Exception:
+                pass
+
+        # ── 5. Navigate to product page ───────────────────────────
+        await page.goto(product_url, wait_until="domcontentloaded")
+        await page.wait_for_timeout(2500)
+
+        # ── 6. Harvest cookies ────────────────────────────────────
+        raw_cookies = await ctx.cookies()
+        await browser.close()
+
+    cookie_dict   = {c["name"]: c["value"] for c in raw_cookies}
+    cookie_header = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
+    rlog(f"  AMZ: {len(cookie_dict)} cookies harvested", "OK")
+    return cookie_dict, cookie_header
+
+
+def _get_amz_cookies(pincode: str, product_url: str) -> tuple[dict, str]:
+    """Thread-safe wrapper: returns cached cookies or runs Playwright."""
+    with _amz_cookie_lock:
+        cached = _amz_cookie_cache.get(pincode)
+        if cached and (time.time() - cached["ts"]) < COOKIE_TTL:
+            rlog(f"  AMZ: using cached cookies for pin={pincode} "
+                 f"(age={int(time.time()-cached['ts'])}s)", "INFO")
+            return cached["dict"], cached["header"]
+
+    # Run async Playwright in a fresh event loop (Flask is sync)
+    loop = asyncio.new_event_loop()
+    try:
+        cookie_dict, cookie_header = loop.run_until_complete(
+            _playwright_get_cookies(pincode, product_url)
+        )
+    finally:
+        loop.close()
+
+    with _amz_cookie_lock:
+        _amz_cookie_cache[pincode] = {
+            "dict": cookie_dict, "header": cookie_header, "ts": time.time()
+        }
+    return cookie_dict, cookie_header
+
+
+# ── HTML price parser ─────────────────────────────────────────
+
+def parse_amazon_price_from_html(html: str) -> dict:
+    """
+    Extract selling price, MRP, discount, and title from an
+    Amazon product page.  Tries the structured price widget first,
+    then falls back to regex.
+    """
+    result = {
+        "mrp": None, "selling_price": None,
+        "title": "", "discount_pct": None, "status": "OK",
+    }
+
+    def _num(text: str):
+        cleaned = re.sub(r"[₹,\s]", "", text or "")
+        m = re.search(r"\d+\.?\d*", cleaned)
+        return m.group() if m else None
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # ── Title ────────────────────────────────────────────────
+    title_el = soup.find("span", {"id": "productTitle"})
+    if title_el:
+        result["title"] = _clean(title_el.get_text())
+
+    # ── OOS check ────────────────────────────────────────────
+    oos_el = soup.find("div", {"id": "outOfStock"})
+    if not oos_el:
+        oos_el = soup.find("span", string=re.compile(r"currently unavailable", re.I))
+    if oos_el:
+        result["status"] = "Out of Stock"
+        return result
+
+    # ── Strategy 1: corePriceDisplay widget ──────────────────
+    price_div = soup.find("div", {"id": "corePriceDisplay_desktop_feature_div"})
+    if price_div:
+        sp_el = price_div.find("span", {"class": "priceToPay"})
+        if sp_el:
+            off = sp_el.find("span", {"class": "a-offscreen"})
+            if off:
+                result["selling_price"] = _num(off.get_text())
+
+        mrp_el = price_div.find("span", {"data-a-strike": "true"})
+        if mrp_el:
+            off = mrp_el.find("span", {"class": "a-offscreen"})
+            if off:
+                result["mrp"] = _num(off.get_text())
+
+        disc_el = price_div.find("span", {"class": "savingsPercentage"})
+        if disc_el:
+            d = re.search(r"[\d.]+", disc_el.get_text())
+            if d:
+                result["discount_pct"] = d.group()
+
+    # ── Strategy 2: apex price block (Fresh / Now layout) ────
+    if not result["selling_price"]:
+        apex = soup.find("div", {"id": "apex_desktop_newAccordionRow"}) or \
+               soup.find("div", {"id": "apex_desktop"})
+        if apex:
+            prices = apex.find_all("span", {"class": "a-offscreen"})
+            nums   = [_num(p.get_text()) for p in prices if _num(p.get_text())]
+            if nums:
+                result["selling_price"] = nums[0]
+                if len(nums) > 1:
+                    result["mrp"] = nums[1]
+
+    # ── Strategy 3: regex fallback ────────────────────────────
+    if not result["selling_price"]:
+        m = re.search(r'"priceAmount"\s*:\s*([\d.]+)', html)
+        if m:
+            result["selling_price"] = m.group(1)
+
+    if not result["mrp"] and result["selling_price"]:
+        # Amazon sometimes shows only SP; set MRP = SP if none found
+        result["mrp"] = result["selling_price"]
+
+    # ── Compute discount if not provided ─────────────────────
+    if result["mrp"] and result["selling_price"] and not result["discount_pct"]:
+        try:
+            mrp = float(result["mrp"])
+            sp  = float(result["selling_price"])
+            if mrp > 0:
+                result["discount_pct"] = str(round((mrp - sp) / mrp * 100, 1))
+        except Exception:
+            pass
+
+    if not result["mrp"] and not result["selling_price"]:
+        result["status"] = "Price Not Found"
+
+    return result
+
+
+# ── Main public fetcher ───────────────────────────────────────
+
+def fetch_amazon_price(comp_id: str, url: str, cfg: dict, pincode: str = None) -> dict:
+    """
+    Fetch Amazon product price for the given ASIN / URL.
+
+    Args:
+        comp_id : ASIN  e.g. "B00K0LUSSS"
+        url     : Full product URL (built from ASIN if blank)
+        cfg     : config_store dict
+        pincode : delivery pincode (falls back to cfg["amz_pincode"])
+
+    Returns dict with keys:
+        product_name, mrp, selling_price, discount_pct, status, url
+    """
+    if not PLAYWRIGHT_AVAILABLE:
+        return {
+            "error": "playwright not installed — run: pip install playwright && playwright install chromium",
+            "mrp": None, "selling_price": None,
+            "product_name": "", "discount_pct": None,
+        }
+
+    pin = pincode or cfg.get("amz_pincode", "516001")
+
+    # Build product URL from ASIN if not provided
+    if not url or url.strip() == "":
+        if not comp_id:
+            return {
+                "error": "Amazon requires either a URL or an ASIN in comp_id",
+                "mrp": None, "selling_price": None,
+                "product_name": "", "discount_pct": None,
+            }
+        url = f"https://www.amazon.in/dp/{comp_id}"
+
+    rlog(f"  AMZ fetch: ASIN={comp_id} pin={pin} url={url[:60]}", "INFO")
+
+    try:
+        cookie_dict, cookie_header = _get_amz_cookies(pin, url)
+    except Exception as e:
+        rlog(f"  AMZ: cookie harvest failed: {e}", "ERROR")
+        return {
+            "error": f"Cookie harvest failed: {e}",
+            "mrp": None, "selling_price": None,
+            "product_name": "", "discount_pct": None,
+        }
+
+    impersonate = cfg.get("amz_impersonate", "chrome124")
+    headers = {**AMZ_BASE_HEADERS, "cookie": cookie_header,
+               "referer": "https://www.amazon.in/"}
+
+    try:
+        if CURL_AVAILABLE:
+            resp = curl_requests.get(
+                url, headers=headers,
+                cookies=cookie_dict,
+                impersonate=impersonate,
+                timeout=30,
+            )
+        elif req_lib:
+            resp = req_lib.get(url, headers=headers, cookies=cookie_dict, timeout=30)
+        else:
+            raise RuntimeError("No HTTP library available")
+
+        resp.raise_for_status()
+        parsed = parse_amazon_price_from_html(resp.text)
+
+        name = parsed.get("title", "")
+        mrp  = parsed.get("mrp")
+        sp   = parsed.get("selling_price")
+        disc = parsed.get("discount_pct")
+        stat = parsed.get("status", "OK")
+
+        log_status = "OK" if (mrp and sp) else "WARN"
+        rlog(
+            f"  AMZ ✓ '{(name or comp_id)[:50]}' "
+            f"MRP={mrp} SP={sp} disc={disc}% status={stat}",
+            log_status,
+        )
+        return {
+            "product_name":  name,
+            "mrp":           str(mrp) if mrp else "",
+            "selling_price": str(sp)  if sp  else "",
+            "discount_pct":  str(disc) if disc else "",
+            "status":        stat,
+            "url":           url,
+        }
+
+    except Exception as e:
+        rlog(f"  AMZ ✗ {e}", "ERROR")
+        raise
+
+
+# ── Cookie cache management (for /api routes) ─────────────────
+
+def clear_amz_cookie_cache(pincode: str = None):
+    """Invalidate Amazon cookie cache. Pass pincode=None to clear all."""
+    with _amz_cookie_lock:
+        if pincode:
+            _amz_cookie_cache.pop(pincode, None)
+            rlog(f"AMZ cookie cache cleared for pin={pincode}", "INFO")
+        else:
+            _amz_cookie_cache.clear()
+            rlog("AMZ cookie cache fully cleared", "INFO")
 def ensure_backup_sheet(service):
     meta = service.spreadsheets().get(spreadsheetId=MASTER_MAPPER_ID).execute()
     for s in meta["sheets"]:
